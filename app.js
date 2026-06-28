@@ -1,13 +1,9 @@
 /**
  * MADRASSA ONLINE — ISLAM MOÇAMBIQUE
- * Sala de Aulas — Firebase + LocalStorage Sync
+ * Sala de Aulas — Firebase + LocalStorage Sync v3
  * 
- * ARQUITETURA:
- * - Cada usuário mantém seu próprio LocalStorage (fonte de verdade)
- * - Firebase serve apenas como canal de DISTRIBUIÇÃO entre usuários
- * - Mensagens recebidas de outros são salvas no LocalStorage local
- * - Ao enviar, salva no LocalStorage PRIMEIRO, depois publica no Firebase
- * - Ao receber do Firebase, salva no LocalStorage e renderiza
+ * CORREÇÃO: Usar .on('value') para capturar TODAS as mensagens (existentes + novas)
+ * em vez de .on('child_added') que só pega novas.
  */
 
 // ============================================
@@ -24,8 +20,13 @@ const firebaseConfig = {
     measurementId: "G-RV9GD4S22T"
 };
 
-// Inicializar Firebase
-firebase.initializeApp(firebaseConfig);
+try {
+    firebase.initializeApp(firebaseConfig);
+    console.log('Firebase OK');
+} catch (e) {
+    console.error('Firebase erro:', e);
+}
+
 const database = firebase.database();
 const storage = firebase.storage();
 
@@ -36,9 +37,9 @@ const ROOM_ID = 'sala_de_aulas_principal';
 const LS_PREFIX = 'madrassa_';
 const LS_USER = LS_PREFIX + 'user';
 const LS_MESSAGES = LS_PREFIX + 'messages';
-const LS_LAST_SYNC = LS_PREFIX + 'lastSync';
+const SYNC_PATH = 'rooms/' + ROOM_ID + '/sync';
+const TYPING_PATH = 'rooms/' + ROOM_ID + '/typing';
 
-// Emojis populares
 const EMOJIS = [
     '😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚',
     '😋','😛','😝','😜','🤪','🤨','🧐','🤓','😎','🥸','🤩','🥳','😏','😒','😞','😔','😟','😕','🙁','☹️',
@@ -66,12 +67,10 @@ let currentAudio = null;
 let audioPlayerInterval = null;
 let typingTimeout = null;
 let isTyping = false;
-let messagesRef = null;
-let typingRef = null;
-let syncRef = null;
-let processedSyncIds = new Set(); // Evita processar a mesma mensagem 2x
+let processedIds = new Set();
 let selectedImageFile = null;
 let selectedImageDataUrl = null;
+let lastSyncTimestamp = 0;
 
 // ============================================
 // ELEMENTOS DOM
@@ -98,65 +97,40 @@ function cacheElements() {
 }
 
 // ============================================
-// LOCALSTORAGE — GERENCIAMENTO DE MENSAGENS
+// LOCALSTORAGE
 // ============================================
-
-/**
- * Obtém todas as mensagens do LocalStorage
- */
 function getLocalMessages() {
     try {
         const data = localStorage.getItem(LS_MESSAGES);
         return data ? JSON.parse(data) : [];
     } catch (e) {
-        console.error('Erro ao ler LocalStorage:', e);
         return [];
     }
 }
 
-/**
- * Salva mensagens no LocalStorage
- */
 function saveLocalMessages(messages) {
     try {
         localStorage.setItem(LS_MESSAGES, JSON.stringify(messages));
     } catch (e) {
-        console.error('Erro ao salvar LocalStorage:', e);
-        showToast('Erro ao salvar mensagem localmente');
+        console.error('Erro LS:', e);
     }
 }
 
-/**
- * Adiciona uma mensagem ao LocalStorage
- * Retorna true se foi adicionada (nova), false se já existia
- */
 function addLocalMessage(msg) {
     const messages = getLocalMessages();
-
-    // Verificar se já existe (pelo syncId ou combinação de campos)
-    const exists = messages.some(m => 
-        m.syncId === msg.syncId || 
-        (m.senderId === msg.senderId && 
-         m.timestamp === msg.timestamp && 
-         m.type === msg.type &&
-         (msg.type === 'text' ? m.text === msg.text : true))
-    );
-
+    const exists = messages.some(m => m.syncId === msg.syncId);
     if (exists) return false;
-
     messages.push(msg);
     saveLocalMessages(messages);
     return true;
 }
 
-/**
- * Limpa todas as mensagens do LocalStorage
- */
 function clearLocalMessages() {
     localStorage.removeItem(LS_MESSAGES);
-    localStorage.removeItem(LS_LAST_SYNC);
+    processedIds.clear();
+    lastSyncTimestamp = 0;
     renderAllMessages();
-    showToast('Conversa limpa! 🗑️');
+    showToast('Conversa limpa!');
 }
 
 // ============================================
@@ -164,14 +138,9 @@ function clearLocalMessages() {
 // ============================================
 document.addEventListener('DOMContentLoaded', () => {
     cacheElements();
-
-    // Definir hora de boas-vindas
     els.welcome_time.textContent = formatTime(new Date());
-
-    // Preencher emojis
     renderEmojis();
 
-    // Verificar se já tem nome salvo
     const savedUser = localStorage.getItem(LS_USER);
     if (savedUser) {
         try {
@@ -183,9 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     setupEventListeners();
-    setupFirebaseListeners();
-
-    // Renderizar mensagens existentes do LocalStorage
+    setupFirebaseConnection();
     renderAllMessages();
 });
 
@@ -197,13 +164,11 @@ function renderEmojis() {
 // EVENT LISTENERS
 // ============================================
 function setupEventListeners() {
-    // Login
     els.btn_enter.addEventListener('click', doLogin);
     els.user_name.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') doLogin();
     });
 
-    // Mensagens
     els.btn_send.addEventListener('click', sendTextMessage);
     els.message_input.addEventListener('keypress', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -212,13 +177,11 @@ function setupEventListeners() {
         }
     });
 
-    // Toggle entre mic e send
     els.message_input.addEventListener('input', () => {
         handleTyping();
         toggleSendMic();
     });
 
-    // Anexos
     els.btn_attach.addEventListener('click', (e) => {
         e.stopPropagation();
         toggleAttachMenu();
@@ -233,7 +196,6 @@ function setupEventListeners() {
         }
     });
 
-    // Imagem
     els.btn_image.addEventListener('click', () => {
         els.image_input.removeAttribute('capture');
         els.image_input.click();
@@ -250,12 +212,10 @@ function setupEventListeners() {
     els.btn_confirm_image.addEventListener('click', sendImageMessage);
     els.btn_cancel_image.addEventListener('click', cancelImagePreview);
 
-    // Visualizador de imagem
     els.btn_close_viewer.addEventListener('click', () => {
         els.image_viewer_modal.classList.add('hidden');
     });
 
-    // Emoji
     els.btn_emoji.addEventListener('click', (e) => {
         e.stopPropagation();
         toggleEmojiPicker();
@@ -269,31 +229,23 @@ function setupEventListeners() {
         }
     });
 
-    // Áudio
     els.btn_record.addEventListener('click', startRecording);
     els.btn_stop_record.addEventListener('click', stopRecording);
     els.btn_cancel_record.addEventListener('click', cancelRecording);
 
-    // Audio Player
     els.btn_close_audio.addEventListener('click', closeAudioPlayer);
     els.btn_play_pause.addEventListener('click', toggleAudioPlayback);
     els.audio_progress.addEventListener('input', seekAudio);
 
-    // Limpar conversa
     els.btn_clear.addEventListener('click', () => {
-        if (confirm('Tem certeza que deseja limpar toda a conversa?')) {
-            clearLocalMessages();
-        }
+        if (confirm('Limpar toda a conversa?')) clearLocalMessages();
     });
 
-    // Fechar modais ao clicar fora
     els.image_preview_modal.addEventListener('click', (e) => {
         if (e.target === els.image_preview_modal) cancelImagePreview();
     });
     els.image_viewer_modal.addEventListener('click', (e) => {
-        if (e.target === els.image_viewer_modal) {
-            els.image_viewer_modal.classList.add('hidden');
-        }
+        if (e.target === els.image_viewer_modal) els.image_viewer_modal.classList.add('hidden');
     });
     els.audio_player_modal.addEventListener('click', (e) => {
         if (e.target === els.audio_player_modal) closeAudioPlayer();
@@ -302,13 +254,8 @@ function setupEventListeners() {
 
 function toggleSendMic() {
     const hasText = els.message_input.value.trim().length > 0;
-    if (hasText) {
-        els.btn_record.classList.add('hidden');
-        els.btn_send.classList.remove('hidden');
-    } else {
-        els.btn_record.classList.remove('hidden');
-        els.btn_send.classList.add('hidden');
-    }
+    els.btn_record.classList.toggle('hidden', hasText);
+    els.btn_send.classList.toggle('hidden', !hasText);
 }
 
 // ============================================
@@ -317,7 +264,7 @@ function toggleSendMic() {
 function doLogin() {
     const name = els.user_name.value.trim();
     if (!name || name.length < 2) {
-        showToast('Por favor, digite seu nome completo');
+        showToast('Digite seu nome completo');
         return;
     }
 
@@ -328,74 +275,126 @@ function doLogin() {
 
     localStorage.setItem(LS_USER, JSON.stringify(currentUser));
 
-    // Animar transição
     els.login_screen.classList.remove('active');
     setTimeout(() => {
         els.chat_screen.classList.add('active');
         els.message_input.focus();
     }, 300);
 
-    showToast(`Bem-vindo, ${name}! 🕌`);
-
-    // Conectar ao Firebase
+    showToast('Bem-vindo, ' + name + '!');
     connectToRoom();
 }
 
 // ============================================
-// FIREBASE — SINCRONIZAÇÃO
+// FIREBASE — CONEXÃO
 // ============================================
-function connectToRoom() {
-    // Referências Firebase
-    messagesRef = database.ref(`rooms/${ROOM_ID}/sync`);
-    typingRef = database.ref(`rooms/${ROOM_ID}/typing`);
-
-    // Limpar typing antigo deste usuário
-    if (currentUser) {
-        typingRef.child(currentUser.id).remove();
-    }
-
-    // === ESCUTAR SINCRONIZAÇÃO (canal de distribuição) ===
-    // Usamos 'child_added' para receber NOVAS mensagens de outros usuários
-    messagesRef.limitToLast(30).on('child_added', (snapshot) => {
-        const syncData = snapshot.val();
-        if (!syncData) return;
-
-        // Não processar mensagens do próprio usuário (já estão no LocalStorage)
-        if (syncData.senderId === currentUser?.id) return;
-
-        // Não processar mensagens já processadas
-        if (processedSyncIds.has(syncData.syncId)) return;
-        processedSyncIds.add(syncData.syncId);
-
-        // Salvar no LocalStorage local
-        const msg = {
-            syncId: syncData.syncId,
-            type: syncData.type,
-            sender: syncData.sender,
-            senderId: syncData.senderId,
-            timestamp: syncData.timestamp,
-            text: syncData.text || null,
-            imageUrl: syncData.imageUrl || null,
-            audioUrl: syncData.audioUrl || null,
-            duration: syncData.duration || null
-        };
-
-        const added = addLocalMessage(msg);
-        if (added) {
-            renderMessage(msg);
-            scrollToBottom();
-
-            // Notificação sutil se não estiver no foco
-            if (document.hidden && syncData.type === 'text') {
-                showToast(`💬 ${syncData.sender}: ${syncData.text.substring(0, 30)}...`);
-            }
+function setupFirebaseConnection() {
+    const connectedRef = database.ref('.info/connected');
+    connectedRef.on('value', (snap) => {
+        const connected = snap.val();
+        if (connected) {
+            els.online_status.textContent = 'Online';
+            els.online_status.style.color = '#25D366';
+        } else {
+            els.online_status.textContent = 'Offline';
+            els.online_status.style.color = '#ff4444';
         }
-
-        // Limpar do Firebase após processar (opcional, para economizar espaço)
-        // snapshot.ref.remove();
     });
 
-    // === ESCUTAR TYPING ===
+    const savedUser = localStorage.getItem(LS_USER);
+    if (savedUser) {
+        try {
+            currentUser = JSON.parse(savedUser);
+            els.login_screen.classList.remove('active');
+            els.chat_screen.classList.add('active');
+            connectToRoom();
+        } catch (e) {
+            console.error('Erro restore user:', e);
+        }
+    }
+}
+
+// ============================================
+// FIREBASE — SINCRONIZAÇÃO CORRIGIDA
+// ============================================
+function connectToRoom() {
+    if (!currentUser) {
+        console.error('Sem usuário');
+        return;
+    }
+
+    console.log('Conectando sala:', ROOM_ID);
+    console.log('Path:', SYNC_PATH);
+    console.log('User:', currentUser.name, currentUser.id);
+
+    // === MÉTODO CORRETO: Usar .on('value') para pegar TUDO ===
+    // .on('value') dispara sempre que QUALQUER dado muda no nó
+    // Isso garante que vemos mensagens antigas E novas
+
+    const syncRef = database.ref(SYNC_PATH);
+
+    syncRef.limitToLast(50).on('value', (snapshot) => {
+        console.log('📨 VALUE event recebido!');
+
+        const allData = snapshot.val();
+        if (!allData) {
+            console.log('Nó vazio');
+            return;
+        }
+
+        const keys = Object.keys(allData);
+        console.log('Total mensagens no Firebase:', keys.length);
+
+        let newCount = 0;
+
+        keys.forEach(key => {
+            const syncData = allData[key];
+            if (!syncData) return;
+
+            // Ignorar mensagens do próprio usuário
+            if (syncData.senderId === currentUser.id) return;
+
+            // Ignorar já processadas
+            if (processedIds.has(syncData.syncId)) return;
+            processedIds.add(syncData.syncId);
+
+            const msg = {
+                syncId: syncData.syncId,
+                type: syncData.type,
+                sender: syncData.sender,
+                senderId: syncData.senderId,
+                timestamp: syncData.timestamp,
+                text: syncData.text || null,
+                imageUrl: syncData.imageUrl || null,
+                audioUrl: syncData.audioUrl || null,
+                duration: syncData.duration || null
+            };
+
+            const added = addLocalMessage(msg);
+            if (added) {
+                renderMessage(msg);
+                newCount++;
+
+                if (document.hidden) {
+                    showToast('💬 ' + syncData.sender + ': ' + (syncData.text || 'mídia').substring(0, 30));
+                }
+            }
+        });
+
+        if (newCount > 0) {
+            console.log('Novas mensagens recebidas:', newCount);
+            scrollToBottom();
+        }
+
+    }, (error) => {
+        console.error('ERRO NO LISTENER:', error.code, error.message);
+        showToast('Erro: ' + error.message);
+    });
+
+    // === TYPING ===
+    const typingRef = database.ref(TYPING_PATH);
+    typingRef.child(currentUser.id).remove();
+
     typingRef.on('value', (snapshot) => {
         const typings = snapshot.val();
         if (!typings) {
@@ -403,11 +402,10 @@ function connectToRoom() {
             return;
         }
 
-        const othersTyping = Object.keys(typings).filter(id => id !== currentUser?.id);
-        if (othersTyping.length > 0) {
-            const names = othersTyping.map(id => typings[id].name).join(', ');
-            els.typing_text.textContent = 
-                othersTyping.length === 1 ? `${names} está digitando` : `${names} estão digitando`;
+        const others = Object.keys(typings).filter(id => id !== currentUser.id);
+        if (others.length > 0) {
+            const names = others.map(id => typings[id].name).join(', ');
+            els.typing_text.textContent = others.length === 1 ? names + ' está digitando' : names + ' estão digitando';
             els.typing_indicator.classList.remove('hidden');
             scrollToBottom();
         } else {
@@ -415,25 +413,14 @@ function connectToRoom() {
         }
     });
 
-    // === STATUS ONLINE ===
-    const connectedRef = database.ref('.info/connected');
-    connectedRef.on('value', (snap) => {
-        if (snap.val() === true) {
-            els.online_status.textContent = 'Online';
-            els.online_status.style.color = '#25D366';
-        } else {
-            els.online_status.textContent = 'Conectando...';
-            els.online_status.style.color = 'rgba(255,255,255,0.8)';
-        }
-    });
+    console.log('Listener ativo!');
 }
 
-/**
- * Publica uma mensagem no Firebase para distribuição
- * Outros usuários receberão e salvarão no próprio LocalStorage
- */
+// ============================================
+// PUBLICAR NO FIREBASE
+// ============================================
 function publishToFirebase(msg) {
-    if (!messagesRef) return Promise.resolve();
+    console.log('Publicando:', msg.syncId);
 
     const syncData = {
         syncId: msg.syncId,
@@ -447,7 +434,13 @@ function publishToFirebase(msg) {
         duration: msg.duration || null
     };
 
-    return messagesRef.push(syncData);
+    return database.ref(SYNC_PATH).push(syncData)
+        .then(() => console.log('Publicado OK'))
+        .catch(err => {
+            console.error('Erro publicar:', err.code, err.message);
+            showToast('Erro ao enviar: ' + err.message);
+            throw err;
+        });
 }
 
 // ============================================
@@ -459,23 +452,15 @@ function sendTextMessage() {
 
     const msg = createMessage('text', { text: text });
 
-    // 1. Salvar no LocalStorage PRIMEIRO
     addLocalMessage(msg);
-
-    // 2. Renderizar imediatamente
     renderMessage(msg);
     scrollToBottom();
 
-    // 3. Limpar input
     els.message_input.value = '';
     toggleSendMic();
     stopTyping();
 
-    // 4. Publicar no Firebase para outros usuários
-    publishToFirebase(msg).catch(err => {
-        console.error('Erro ao publicar no Firebase:', err);
-        showToast('Mensagem salva localmente. Sincronizando...');
-    });
+    publishToFirebase(msg);
 }
 
 // ============================================
@@ -486,7 +471,7 @@ function handleImageSelect(e) {
     if (!file) return;
 
     if (file.size > 8 * 1024 * 1024) {
-        showToast('Imagem muito grande. Máximo 8MB.');
+        showToast('Imagem muito grande. Máx 8MB.');
         return;
     }
 
@@ -515,87 +500,63 @@ async function sendImageMessage() {
     els.btn_confirm_image.disabled = true;
 
     try {
-        // 1. Comprimir imagem
-        showToast('Comprimindo imagem...');
+        showToast('Comprimindo...');
         const compressedBlob = await compressImage(selectedImageFile);
 
-        // 2. Upload para Firebase Storage
-        const fileName = `images/${Date.now()}_${Math.random().toString(36).substr(2, 8)}.jpg`;
+        const fileName = 'images/' + Date.now() + '_' + Math.random().toString(36).substr(2, 8) + '.jpg';
         const storageRef = storage.ref(fileName);
 
         await storageRef.put(compressedBlob);
         const downloadURL = await storageRef.getDownloadURL();
 
-        // 3. Criar mensagem
         const msg = createMessage('image', { imageUrl: downloadURL });
 
-        // 4. Salvar no LocalStorage
         addLocalMessage(msg);
-
-        // 5. Renderizar
         renderMessage(msg);
         scrollToBottom();
 
-        // 6. Publicar no Firebase
         await publishToFirebase(msg);
 
-        // 7. Limpar
         cancelImagePreview();
-        showToast('Imagem enviada! 📷');
+        showToast('Imagem enviada!');
 
     } catch (error) {
-        console.error('Erro ao enviar imagem:', error);
-        showToast('Erro ao enviar imagem. Tente novamente.');
+        console.error('Erro imagem:', error);
+        showToast('Erro: ' + error.message);
     } finally {
         els.btn_confirm_image.textContent = 'Enviar';
         els.btn_confirm_image.disabled = false;
     }
 }
 
-// Comprimir imagem via canvas
 function compressImage(file) {
     return new Promise((resolve, reject) => {
         const img = new Image();
         const reader = new FileReader();
 
-        reader.onload = (e) => {
-            img.src = e.target.result;
-        };
+        reader.onload = (e) => { img.src = e.target.result; };
         reader.onerror = reject;
         reader.readAsDataURL(file);
 
         img.onload = () => {
             const canvas = document.createElement('canvas');
-            const MAX_WIDTH = 1200;
-            const MAX_HEIGHT = 1200;
-            let width = img.width;
-            let height = img.height;
+            const MAX = 1200;
+            let w = img.width, h = img.height;
 
-            if (width > height) {
-                if (width > MAX_WIDTH) {
-                    height = Math.round(height * MAX_WIDTH / width);
-                    width = MAX_WIDTH;
-                }
-            } else {
-                if (height > MAX_HEIGHT) {
-                    width = Math.round(width * MAX_HEIGHT / height);
-                    height = MAX_HEIGHT;
-                }
-            }
+            if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }}
+            else { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; }}
 
-            canvas.width = width;
-            canvas.height = height;
+            canvas.width = w; canvas.height = h;
             const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#FFFFFF';
-            ctx.fillRect(0, 0, width, height);
-            ctx.drawImage(img, 0, 0, width, height);
+            ctx.fillStyle = '#FFF';
+            ctx.fillRect(0, 0, w, h);
+            ctx.drawImage(img, 0, 0, w, h);
 
             canvas.toBlob((blob) => {
                 if (blob) resolve(blob);
-                else reject(new Error('Falha ao comprimir imagem'));
+                else reject(new Error('Falha'));
             }, 'image/jpeg', 0.75);
         };
-
         img.onerror = reject;
     });
 }
@@ -605,22 +566,17 @@ function compressImage(file) {
 // ============================================
 async function startRecording() {
     if (!navigator.mediaDevices || !window.MediaRecorder) {
-        showToast('Seu navegador não suporta gravação de áudio');
+        showToast('Navegador não suporta gravação');
         return;
     }
 
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-            audio: {
-                echoCancellation: true,
-                noiseSuppression: true,
-                sampleRate: 22050
-            }
+        const stream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 22050 }
         });
 
-        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
-            ? 'audio/webm;codecs=opus' 
-            : 'audio/webm';
+        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+            ? 'audio/webm;codecs=opus' : 'audio/webm';
 
         mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType });
         audioChunks = [];
@@ -630,26 +586,25 @@ async function startRecording() {
         };
 
         mediaRecorder.onstop = async () => {
-            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-            await uploadAudio(audioBlob);
-            stream.getTracks().forEach(track => track.stop());
+            const blob = new Blob(audioChunks, { type: 'audio/webm' });
+            await uploadAudio(blob);
+            stream.getTracks().forEach(t => t.stop());
         };
 
         mediaRecorder.onerror = (e) => {
-            console.error('Erro no MediaRecorder:', e);
+            console.error('Erro recorder:', e);
             showToast('Erro na gravação');
             cancelRecordingUI();
         };
 
-        mediaRecorder.start(100); // Coletar a cada 100ms
+        mediaRecorder.start(100);
         isRecording = true;
         recordingStartTime = Date.now();
-
         showRecordingUI();
 
     } catch (err) {
-        console.error('Erro ao iniciar gravação:', err);
-        showToast('Permita o acesso ao microfone para gravar áudio');
+        console.error('Erro gravar:', err);
+        showToast('Permita acesso ao microfone');
     }
 }
 
@@ -669,23 +624,16 @@ function cancelRecordingUI() {
 function startRecordingTimer() {
     recordingTimer = setInterval(() => {
         const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
-        const mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
-        const secs = (elapsed % 60).toString().padStart(2, '0');
-        els.recorder_timer.textContent = `${mins}:${secs}`;
-
-        // Limite de 5 minutos
-        if (elapsed >= 300) {
-            stopRecording();
-        }
+        const m = Math.floor(elapsed / 60).toString().padStart(2, '0');
+        const s = (elapsed % 60).toString().padStart(2, '0');
+        els.recorder_timer.textContent = m + ':' + s;
+        if (elapsed >= 300) stopRecording();
     }, 1000);
 }
 
 function stopRecording() {
     if (!isRecording || !mediaRecorder) return;
-
-    if (mediaRecorder.state !== 'inactive') {
-        mediaRecorder.stop();
-    }
+    if (mediaRecorder.state !== 'inactive') mediaRecorder.stop();
     isRecording = false;
     clearInterval(recordingTimer);
     cancelRecordingUI();
@@ -693,10 +641,7 @@ function stopRecording() {
 
 function cancelRecording() {
     if (!isRecording || !mediaRecorder) return;
-
-    if (mediaRecorder.state !== 'inactive') {
-        mediaRecorder.stop();
-    }
+    if (mediaRecorder.state !== 'inactive') mediaRecorder.stop();
     isRecording = false;
     clearInterval(recordingTimer);
     audioChunks = [];
@@ -705,43 +650,35 @@ function cancelRecording() {
 
 async function uploadAudio(audioBlob) {
     if (audioBlob.size === 0) return;
-
     const duration = Math.floor((Date.now() - recordingStartTime) / 1000);
 
-    showToast('Enviando áudio... 🎵');
+    showToast('Enviando áudio...');
 
     try {
-        const fileName = `audio/${Date.now()}_${Math.random().toString(36).substr(2, 8)}.webm`;
+        const fileName = 'audio/' + Date.now() + '_' + Math.random().toString(36).substr(2, 8) + '.webm';
         const storageRef = storage.ref(fileName);
 
         await storageRef.put(audioBlob);
         const downloadURL = await storageRef.getDownloadURL();
 
-        const msg = createMessage('audio', { 
-            audioUrl: downloadURL, 
-            duration: duration 
-        });
+        const msg = createMessage('audio', { audioUrl: downloadURL, duration: duration });
 
-        // Salvar no LocalStorage
         addLocalMessage(msg);
-
-        // Renderizar
         renderMessage(msg);
         scrollToBottom();
 
-        // Publicar no Firebase
         await publishToFirebase(msg);
 
-        showToast('Áudio enviado! 🎵');
+        showToast('Áudio enviado!');
 
     } catch (error) {
-        console.error('Erro ao enviar áudio:', error);
+        console.error('Erro áudio:', error);
         showToast('Erro ao enviar áudio');
     }
 }
 
 // ============================================
-// CRIAR MENSAGEM PADRONIZADA
+// CRIAR MENSAGEM
 // ============================================
 function createMessage(type, data) {
     return {
@@ -758,77 +695,62 @@ function createMessage(type, data) {
 }
 
 // ============================================
-// RENDERIZAR TODAS AS MENSAGENS (do LocalStorage)
+// RENDERIZAR MENSAGENS
 // ============================================
 function renderAllMessages() {
     els.messages_list.innerHTML = '';
-    const messages = getLocalMessages();
+    processedIds.clear();
 
+    const messages = getLocalMessages();
     messages.sort((a, b) => a.timestamp - b.timestamp);
 
     messages.forEach(msg => {
+        processedIds.add(msg.syncId);
         renderMessage(msg, false);
     });
 
     scrollToBottom();
 }
 
-// ============================================
-// RENDERIZAR UMA MENSAGEM
-// ============================================
-function renderMessage(msg, animate = true) {
-    const isMe = msg.senderId === currentUser?.id;
+function renderMessage(msg, animate) {
+    const isMe = msg.senderId === (currentUser ? currentUser.id : null);
 
-    // Verificar se já existe no DOM
-    const existing = document.querySelector(`[data-sync-id="${msg.syncId}"]`);
+    const existing = document.querySelector('[data-sync-id="' + msg.syncId + '"]');
     if (existing) return;
 
     const div = document.createElement('div');
-    div.className = `message ${isMe ? 'me' : 'other'}`;
+    div.className = 'message ' + (isMe ? 'me' : 'other');
     div.dataset.syncId = msg.syncId;
-    if (animate) div.style.animation = 'messageIn 0.25s ease';
+    if (animate !== false) div.style.animation = 'messageIn 0.25s ease';
 
     const time = formatTime(new Date(msg.timestamp));
-
     let content = '';
 
     if (!isMe) {
-        content += `<div class="message-sender">${escapeHtml(msg.sender)}</div>`;
+        content += '<div class="message-sender">' + escapeHtml(msg.sender) + '</div>';
     }
 
     switch (msg.type) {
         case 'text':
-            content += `<div class="message-text">${escapeHtml(msg.text)}</div>`;
+            content += '<div class="message-text">' + escapeHtml(msg.text) + '</div>';
             break;
-
         case 'image':
             if (msg.imageUrl) {
-                content += `<img class="message-image" src="${msg.imageUrl}" alt="Imagem" loading="lazy" onclick="window.viewImage('${msg.imageUrl}')">`;
+                content += '<img class="message-image" src="' + msg.imageUrl + '" alt="Imagem" loading="lazy" onclick="window.viewImage(&quot;' + msg.imageUrl + '&quot;)">';
             }
             break;
-
         case 'audio':
-            const durationStr = formatDuration(msg.duration || 0);
-            content += `
-                <div class="message-audio" onclick="window.playAudio('${msg.audioUrl}', ${msg.duration || 0})">
-                    <div class="audio-icon">▶️</div>
-                    <div class="audio-info">
-                        <div class="audio-wave">
-                            <span></span><span></span><span></span><span></span><span></span>
-                        </div>
-                        <div class="audio-duration">${durationStr}</div>
-                    </div>
-                </div>
-            `;
+            const dur = formatDuration(msg.duration || 0);
+            content += '<div class="message-audio" onclick="window.playAudio(&quot;' + msg.audioUrl + '&quot;, ' + (msg.duration || 0) + ')">' +
+                '<div class="audio-icon">▶️</div>' +
+                '<div class="audio-info">' +
+                '<div class="audio-wave"><span></span><span></span><span></span><span></span><span></span></div>' +
+                '<div class="audio-duration">' + dur + '</div></div></div>';
             break;
     }
 
-    content += `
-        <div class="message-meta">
-            <span class="message-time">${time}</span>
-            ${isMe ? '<span class="message-checks">✓✓</span>' : ''}
-        </div>
-    `;
+    content += '<div class="message-meta"><span class="message-time">' + time + '</span>' +
+        (isMe ? '<span class="message-checks">✓✓</span>' : '') + '</div>';
 
     div.innerHTML = content;
     els.messages_list.appendChild(div);
@@ -838,10 +760,7 @@ function renderMessage(msg, animate = true) {
 // REPRODUTOR DE ÁUDIO
 // ============================================
 window.playAudio = function(url, duration) {
-    if (currentAudio) {
-        currentAudio.pause();
-        currentAudio.currentTime = 0;
-    }
+    if (currentAudio) { currentAudio.pause(); currentAudio.currentTime = 0; }
 
     currentAudio = new Audio(url);
     els.audio_player_modal.classList.remove('hidden');
@@ -849,37 +768,28 @@ window.playAudio = function(url, duration) {
     els.audio_progress.value = 0;
     els.audio_progress.max = duration || 100;
 
-    currentAudio.play().catch(err => {
-        console.error('Erro ao reproduzir:', err);
-        showToast('Erro ao reproduzir áudio');
-    });
+    currentAudio.play().catch(() => showToast('Erro ao reproduzir'));
 
     currentAudio.onended = () => {
         els.btn_play_pause.textContent = '▶️';
         clearInterval(audioPlayerInterval);
-        els.audio_time.textContent = formatDuration(duration) + ' / ' + formatDuration(duration);
     };
 
-    currentAudio.onerror = () => {
-        showToast('Erro ao carregar áudio');
-        closeAudioPlayer();
-    };
+    currentAudio.onerror = () => { showToast('Erro ao carregar'); closeAudioPlayer(); };
 
     clearInterval(audioPlayerInterval);
     audioPlayerInterval = setInterval(() => {
         if (currentAudio && !currentAudio.paused) {
-            const current = Math.floor(currentAudio.currentTime);
             els.audio_progress.value = currentAudio.currentTime;
-            els.audio_time.textContent = `${formatDuration(current)} / ${formatDuration(duration)}`;
+            els.audio_time.textContent = formatDuration(Math.floor(currentAudio.currentTime)) + ' / ' + formatDuration(duration);
         }
     }, 500);
 };
 
 function toggleAudioPlayback() {
     if (!currentAudio) return;
-
     if (currentAudio.paused) {
-        currentAudio.play().catch(() => showToast('Erro ao reproduzir'));
+        currentAudio.play().catch(() => showToast('Erro'));
         els.btn_play_pause.textContent = '⏸️';
     } else {
         currentAudio.pause();
@@ -888,17 +798,11 @@ function toggleAudioPlayback() {
 }
 
 function seekAudio() {
-    if (currentAudio) {
-        currentAudio.currentTime = parseFloat(els.audio_progress.value);
-    }
+    if (currentAudio) currentAudio.currentTime = parseFloat(els.audio_progress.value);
 }
 
 function closeAudioPlayer() {
-    if (currentAudio) {
-        currentAudio.pause();
-        currentAudio.currentTime = 0;
-        currentAudio = null;
-    }
+    if (currentAudio) { currentAudio.pause(); currentAudio.currentTime = 0; currentAudio = null; }
     clearInterval(audioPlayerInterval);
     els.audio_player_modal.classList.add('hidden');
 }
@@ -912,14 +816,14 @@ window.viewImage = function(url) {
 };
 
 // ============================================
-// INDICADOR DE DIGITAÇÃO
+// TYPING
 // ============================================
 function handleTyping() {
-    if (!currentUser || !typingRef) return;
+    if (!currentUser) return;
 
     if (!isTyping && els.message_input.value.length > 0) {
         isTyping = true;
-        typingRef.child(currentUser.id).set({
+        database.ref(TYPING_PATH + '/' + currentUser.id).set({
             name: currentUser.name,
             timestamp: firebase.database.ServerValue.TIMESTAMP
         });
@@ -930,9 +834,9 @@ function handleTyping() {
 }
 
 function stopTyping() {
-    if (!isTyping || !typingRef || !currentUser) return;
+    if (!isTyping || !currentUser) return;
     isTyping = false;
-    typingRef.child(currentUser.id).remove();
+    database.ref(TYPING_PATH + '/' + currentUser.id).remove();
 }
 
 // ============================================
@@ -963,15 +867,15 @@ function formatTime(date) {
     } catch {
         const h = date.getHours().toString().padStart(2, '0');
         const m = date.getMinutes().toString().padStart(2, '0');
-        return `${h}:${m}`;
+        return h + ':' + m;
     }
 }
 
 function formatDuration(seconds) {
     if (!seconds || seconds < 0) seconds = 0;
-    const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
-    const secs = (seconds % 60).toString().padStart(2, '0');
-    return `${mins}:${secs}`;
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = (seconds % 60).toString().padStart(2, '0');
+    return m + ':' + s;
 }
 
 function escapeHtml(text) {
@@ -985,26 +889,20 @@ let toastTimeout = null;
 function showToast(message) {
     els.toast.textContent = message;
     els.toast.classList.remove('hidden');
-
     clearTimeout(toastTimeout);
-    toastTimeout = setTimeout(() => {
-        els.toast.classList.add('hidden');
-    }, 2800);
+    toastTimeout = setTimeout(() => { els.toast.classList.add('hidden'); }, 2800);
 }
 
 // ============================================
-// LIMPEZA AO SAIR
+// LIMPEZA
 // ============================================
 window.addEventListener('beforeunload', () => {
-    if (currentUser && typingRef) {
-        typingRef.child(currentUser.id).remove();
-    }
+    if (currentUser) database.ref(TYPING_PATH + '/' + currentUser.id).remove();
 });
 
-// Limpar typing quando a aba perde foco
 document.addEventListener('visibilitychange', () => {
-    if (document.hidden && currentUser && typingRef) {
-        typingRef.child(currentUser.id).remove();
+    if (document.hidden && currentUser) {
+        database.ref(TYPING_PATH + '/' + currentUser.id).remove();
         isTyping = false;
     }
 });

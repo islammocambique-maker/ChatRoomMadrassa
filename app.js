@@ -1,7 +1,27 @@
 /**
- * MADRASSA ONLINE v4 — FUNCIONAL
- * Corrigido: áudio, imagem, emojis, sync em tempo real
+ * MADRASSA ONLINE v5 — COM DIAGNÓSTICO VISUAL PARA CELULAR
+ * Botão DEBUG no canto superior direito mostra logs na tela
  */
+
+// ========== DIAGNÓSTICO VISUAL (para celular, sem F12) ==========
+let debugVisible = false;
+function toggleDebug() {
+    debugVisible = !debugVisible;
+    document.getElementById('debug-panel').style.display = debugVisible ? 'block' : 'none';
+}
+function dlog(msg, type='info') {
+    const div = document.getElementById('debug-logs');
+    const line = document.createElement('div');
+    const time = new Date().toLocaleTimeString('pt-MZ');
+    line.style.cssText = 'border-bottom:1px solid #333; padding:2px 0; color:' + (type==='error'?'#ff4444':type==='warn'?'#ffaa00':'#00ff88');
+    line.textContent = '[' + time + '] ' + msg;
+    div.appendChild(line);
+    div.scrollTop = div.scrollHeight;
+    // Também no console real (se disponível)
+    if(type==='error') console.error(msg);
+    else if(type==='warn') console.warn(msg);
+    else console.log(msg);
+}
 
 // ========== FIREBASE ==========
 const firebaseConfig = {
@@ -15,7 +35,13 @@ const firebaseConfig = {
     measurementId: "G-RV9GD4S22T"
 };
 
-firebase.initializeApp(firebaseConfig);
+try {
+    firebase.initializeApp(firebaseConfig);
+    dlog('Firebase inicializado OK');
+} catch (e) {
+    dlog('ERRO Firebase: ' + e.message, 'error');
+}
+
 const db = firebase.database();
 const st = firebase.storage();
 
@@ -52,7 +78,7 @@ function getMsgs() {
 }
 function saveMsgs(msgs) {
     try { localStorage.setItem(LS_MSGS, JSON.stringify(msgs)); }
-    catch(e) { console.error('LS erro:', e); }
+    catch(e) { dlog('Erro LS: ' + e.message, 'error'); }
 }
 function addMsg(msg) {
     const msgs = getMsgs();
@@ -70,10 +96,12 @@ function clearMsgs() {
 
 // ========== INICIALIZAÇÃO ==========
 document.addEventListener('DOMContentLoaded', () => {
+    dlog('App iniciado');
     $('welcome-time').textContent = fmtTime(new Date());
 
     // Emojis
     $('emoji-grid').innerHTML = EMOJIS.map(e => '<span onclick="addEmoji(this)">' + e + '</span>').join('');
+    dlog('Emojis carregados: ' + EMOJIS.length);
 
     // Restaurar usuário
     const saved = localStorage.getItem(LS_USER);
@@ -81,6 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const u = JSON.parse(saved);
             $('user-name').value = u.name || '';
+            dlog('Usuário salvo encontrado: ' + u.name);
         } catch(e) { $('user-name').value = saved; }
     }
 
@@ -160,6 +189,7 @@ function login() {
 
     me = { name:name, id:'u'+Date.now()+'_'+Math.random().toString(36).substr(2,6) };
     localStorage.setItem(LS_USER, JSON.stringify(me));
+    dlog('Login: ' + me.name + ' | ID: ' + me.id);
 
     $('login-screen').classList.remove('active');
     setTimeout(() => {
@@ -177,33 +207,36 @@ function bindFirebase() {
         const on = s.val();
         $('online-status').textContent = on ? 'Online' : 'Offline';
         $('online-status').style.color = on ? '#25D366' : '#ff4444';
+        dlog('Firebase: ' + (on?'Online':'Offline'));
     });
 
-    // Auto-login se já tem usuário
     const saved = localStorage.getItem(LS_USER);
     if(saved) {
         try {
             me = JSON.parse(saved);
             $('login-screen').classList.remove('active');
             $('chat-screen').classList.add('active');
+            dlog('Auto-login: ' + me.name);
             connectRoom();
-        } catch(e) {}
+        } catch(e) { dlog('Erro auto-login: ' + e.message, 'error'); }
     }
 }
 
 // ========== SINCRONIZAÇÃO ==========
 function connectRoom() {
-    if(!me) return;
-    console.log('Conectando...');
+    if(!me) { dlog('Sem usuário para conectar', 'error'); return; }
+    dlog('Conectando sala: ' + SYNC);
 
-    // Listener principal: .on('value') pega TUDO
+    // Listener principal
     db.ref(SYNC).limitToLast(50).on('value', (snap) => {
+        dlog('Dados recebidos do Firebase');
         const data = snap.val();
-        if(!data) return;
+        if(!data) { dlog('Nó vazio', 'warn'); return; }
 
         const keys = Object.keys(data);
-        let novas = 0;
+        dlog('Total mensagens no Firebase: ' + keys.length);
 
+        let novas = 0;
         keys.forEach(k => {
             const d = data[k];
             if(!d || d.senderId===me.id) return;
@@ -227,12 +260,16 @@ function connectRoom() {
             if(addMsg(msg)) {
                 renderMsg(msg);
                 novas++;
+                dlog('Nova msg de ' + msg.sender + ': ' + (msg.text || '['+msg.type+']'));
             }
         });
 
-        if(novas>0) scrollBottom();
+        if(novas>0) {
+            scrollBottom();
+            dlog(novas + ' mensagens novas recebidas');
+        }
     }, (err) => {
-        console.error('Erro sync:', err);
+        dlog('ERRO sync: ' + err.message, 'error');
         toast('Erro de conexão');
     });
 
@@ -251,30 +288,28 @@ function connectRoom() {
         }
     });
 
-    // Limpar typing ao sair
     window.onbeforeunload = () => { if(me) db.ref(TYPING+'/'+me.id).remove(); };
+    dlog('Listener ativo!');
 }
 
 function pub(msg) {
+    dlog('Publicando: ' + msg.type);
     const data = {
-        id: msg.id,
-        syncId: msg.id,
-        type: msg.type,
-        sender: msg.sender,
-        senderId: msg.senderId,
-        timestamp: msg.time,
-        text: msg.text,
-        imageUrl: msg.img,
-        audioUrl: msg.audio,
-        duration: msg.dur
+        id: msg.id, syncId: msg.id, type: msg.type,
+        sender: msg.sender, senderId: msg.senderId,
+        timestamp: msg.time, text: msg.text,
+        imageUrl: msg.img, audioUrl: msg.audio, duration: msg.dur
     };
-    return db.ref(SYNC).push(data);
+    return db.ref(SYNC).push(data)
+        .then(() => { dlog('Publicado OK: ' + msg.id); })
+        .catch(err => { dlog('ERRO publicar: ' + err.message, 'error'); toast('Erro ao enviar'); throw err; });
 }
 
 // ========== ENVIAR TEXTO ==========
 function sendText() {
     const text = $('message-input').value.trim();
     if(!text || !me) return;
+    dlog('Enviando texto: ' + text.substring(0,30));
 
     const msg = mkMsg('text', {text:text});
     addMsg(msg);
@@ -285,22 +320,25 @@ function sendText() {
     toggleSendMic();
     stopTyping();
 
-    pub(msg).catch(e => toast('Erro ao enviar'));
+    pub(msg);
 }
 
 // ========== IMAGEM ==========
 function onImgSelect(e) {
     const f = e.target.files[0];
-    if(!f) return;
+    if(!f) { dlog('Nenhum arquivo selecionado', 'warn'); return; }
     if(f.size > 8*1024*1024) { toast('Máx 8MB'); return; }
 
     imgFile = f;
+    dlog('Imagem selecionada: ' + f.name + ' (' + f.size + ' bytes)');
+
     const r = new FileReader();
     r.onload = (ev) => {
         imgData = ev.target.result;
         $('preview-img').src = imgData;
         $('image-preview-modal').classList.remove('hidden');
     };
+    r.onerror = () => { dlog('Erro ao ler imagem', 'error'); };
     r.readAsDataURL(f);
 }
 
@@ -311,20 +349,22 @@ function cancelImg() {
 }
 
 async function sendImg() {
-    if(!imgFile || !me) return;
+    if(!imgFile || !me) { dlog('Sem arquivo ou usuário', 'error'); return; }
     $('btn-confirm-image').textContent = 'Enviando...';
     $('btn-confirm-image').disabled = true;
 
     try {
-        toast('Comprimindo...');
+        dlog('Comprimindo imagem...');
         const blob = await compressImg(imgFile);
+        dlog('Imagem comprimida: ' + blob.size + ' bytes');
 
         const name = 'img/'+Date.now()+'_'+Math.random().toString(36).substr(2,8)+'.jpg';
+        dlog('Upload para: ' + name);
         const ref = st.ref(name);
 
         await ref.put(blob);
         const url = await ref.getDownloadURL();
-        console.log('IMG URL:', url);
+        dlog('IMG URL: ' + url.substring(0,50) + '...');
 
         const msg = mkMsg('image', {img:url});
         addMsg(msg);
@@ -336,8 +376,9 @@ async function sendImg() {
         toast('Imagem enviada!');
 
     } catch(e) {
-        console.error('Erro img:', e);
-        toast('Erro: '+e.message);
+        dlog('ERRO imagem: ' + e.message, 'error');
+        dlog('Stack: ' + (e.stack || 'sem stack'), 'error');
+        toast('Erro: ' + e.message);
     } finally {
         $('btn-confirm-image').textContent = 'Enviar';
         $('btn-confirm-image').disabled = false;
@@ -349,10 +390,11 @@ function compressImg(file) {
         const img = new Image();
         const r = new FileReader();
         r.onload = (e) => { img.src = e.target.result; };
-        r.onerror = reject;
+        r.onerror = (e) => { dlog('FileReader erro', 'error'); reject(e); };
         r.readAsDataURL(file);
 
         img.onload = () => {
+            dlog('Imagem carregada: ' + img.width + 'x' + img.height);
             const c = document.createElement('canvas');
             const MAX = 1200;
             let w = img.width, h = img.height;
@@ -362,44 +404,53 @@ function compressImg(file) {
             const ctx = c.getContext('2d');
             ctx.fillStyle='#FFF'; ctx.fillRect(0,0,w,h);
             ctx.drawImage(img,0,0,w,h);
-            c.toBlob((b) => { if(b) resolve(b); else reject('Falha'); }, 'image/jpeg', 0.75);
+            c.toBlob((b) => {
+                if(b) { dlog('Blob criado: ' + b.size + ' bytes'); resolve(b); }
+                else { dlog('Falha ao criar blob', 'error'); reject('Falha'); }
+            }, 'image/jpeg', 0.75);
         };
-        img.onerror = reject;
+        img.onerror = () => { dlog('Erro ao carregar imagem', 'error'); reject('Erro img'); };
     });
 }
 
 // ========== ÁUDIO ==========
 async function startRec() {
+    dlog('Iniciando gravação...');
     if(!navigator.mediaDevices || !window.MediaRecorder) {
+        dlog('MediaRecorder não suportado', 'error');
         toast('Navegador não suporta áudio'); return;
     }
 
     try {
+        dlog('Solicitando microfone...');
         const stream = await navigator.mediaDevices.getUserMedia({
             audio: { echoCancellation:true, noiseSuppression:true, sampleRate:22050 }
         });
+        dlog('Microfone OK');
 
         const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
             ? 'audio/webm;codecs=opus' : 'audio/webm';
+        dlog('MIME: ' + mime);
 
         recorder = new MediaRecorder(stream, {mimeType:mime});
         audioChunks = [];
 
         recorder.ondataavailable = (e) => {
-            console.log('Audio chunk:', e.data.size, 'bytes');
+            dlog('Chunk: ' + e.data.size + ' bytes');
             if(e.data.size>0) audioChunks.push(e.data);
         };
 
         recorder.onstop = async () => {
-            console.log('Gravação parada. Chunks:', audioChunks.length);
+            dlog('Gravação parada. Chunks: ' + audioChunks.length);
             const blob = new Blob(audioChunks, {type:'audio/webm'});
-            console.log('Blob size:', blob.size);
+            dlog('Blob total: ' + blob.size + ' bytes');
             if(blob.size>0) await uploadAudio(blob);
+            else { dlog('Blob vazio!', 'error'); toast('Áudio vazio'); }
             stream.getTracks().forEach(t=>t.stop());
         };
 
         recorder.onerror = (e) => {
-            console.error('Recorder erro:', e);
+            dlog('Recorder erro: ' + e.message, 'error');
             toast('Erro na gravação');
             cancelRecUI();
         };
@@ -408,9 +459,10 @@ async function startRec() {
         isRec = true;
         recStart = Date.now();
         showRecUI();
+        dlog('Gravando...');
 
     } catch(err) {
-        console.error('Erro mic:', err);
+        dlog('ERRO mic: ' + err.name + ' - ' + err.message, 'error');
         toast('Permita acesso ao microfone');
     }
 }
@@ -435,7 +487,8 @@ function cancelRecUI() {
 }
 
 function stopRec() {
-    if(!isRec || !recorder) return;
+    if(!isRec || !recorder) { dlog('Nada para parar', 'warn'); return; }
+    dlog('Parando gravação... Estado: ' + recorder.state);
     if(recorder.state!=='inactive') recorder.stop();
     isRec = false;
     clearInterval(recTimer);
@@ -444,6 +497,7 @@ function stopRec() {
 
 function cancelRec() {
     if(!isRec || !recorder) return;
+    dlog('Cancelando gravação');
     if(recorder.state!=='inactive') recorder.stop();
     isRec = false;
     clearInterval(recTimer);
@@ -452,19 +506,23 @@ function cancelRec() {
 }
 
 async function uploadAudio(blob) {
-    console.log('Upload audio. Size:', blob.size);
-    if(blob.size===0) { toast('Áudio vazio'); return; }
+    dlog('Upload audio. Size: ' + blob.size);
+    if(blob.size===0) { dlog('Blob vazio!', 'error'); toast('Áudio vazio'); return; }
 
     const dur = Math.floor((Date.now()-recStart)/1000);
     toast('Enviando áudio...');
 
     try {
         const name = 'audio/'+Date.now()+'_'+Math.random().toString(36).substr(2,8)+'.webm';
+        dlog('Upload para: ' + name);
         const ref = st.ref(name);
 
+        dlog('Iniciando put...');
         await ref.put(blob);
+        dlog('Put OK');
+
         const url = await ref.getDownloadURL();
-        console.log('Audio URL:', url);
+        dlog('Audio URL: ' + url.substring(0,50) + '...');
 
         const msg = mkMsg('audio', {audio:url, dur:dur});
         addMsg(msg);
@@ -475,7 +533,8 @@ async function uploadAudio(blob) {
         toast('Áudio enviado!');
 
     } catch(e) {
-        console.error('Erro audio:', e);
+        dlog('ERRO audio upload: ' + e.message, 'error');
+        dlog('Code: ' + (e.code || 'sem code'), 'error');
         toast('Erro ao enviar áudio');
     }
 }
@@ -524,14 +583,19 @@ function renderMsg(msg, anim) {
     }
     else if(msg.type==='image') {
         if(msg.img) html += '<img class="msg-img" src="'+msg.img+'" onclick="viewImg(\''+msg.img+'\')">';
+        else html += '<div class="msg-text">[Imagem não carregada]</div>';
     }
     else if(msg.type==='audio') {
-        const d = fmtDur(msg.dur);
-        html += '<div class="msg-audio" onclick="playAudio(\''+msg.audio+'\','+msg.dur+')">'+
-            '<div class="aud-icon">▶️</div>'+
-            '<div class="aud-info">'+
-            '<div class="aud-wave"><span></span><span></span><span></span><span></span><span></span></div>'+
-            '<div class="aud-dur">'+d+'</div></div></div>';
+        if(msg.audio) {
+            const d = fmtDur(msg.dur);
+            html += '<div class="msg-audio" onclick="playAudio(\''+msg.audio+'\','+msg.dur+')">'+
+                '<div class="aud-icon">▶️</div>'+
+                '<div class="aud-info">'+
+                '<div class="aud-wave"><span></span><span></span><span></span><span></span><span></span></div>'+
+                '<div class="aud-dur">'+d+'</div></div></div>';
+        } else {
+            html += '<div class="msg-text">[Áudio não carregado]</div>';
+        }
     }
 
     html += '<div class="msg-meta"><span class="msg-time">'+t+'</span>'+(isMe?'<span class="msg-check">✓✓</span>':'')+'</div>';
@@ -542,6 +606,7 @@ function renderMsg(msg, anim) {
 
 // ========== PLAYER ÁUDIO ==========
 window.playAudio = function(url, dur) {
+    dlog('Reproduzindo: ' + url.substring(0,40) + '...');
     if(player) { player.pause(); player.currentTime=0; }
 
     player = new Audio(url);
@@ -550,13 +615,13 @@ window.playAudio = function(url, dur) {
     $('audio-progress').value = 0;
     $('audio-progress').max = dur || 100;
 
-    player.play().catch(() => toast('Erro ao reproduzir'));
+    player.play().catch((e) => { dlog('Erro play: ' + e.message, 'error'); toast('Erro ao reproduzir'); });
 
     player.onended = () => {
         $('btn-play-pause').textContent = '▶️';
         clearInterval(playerTimer);
     };
-    player.onerror = () => { toast('Erro áudio'); closePlayer(); };
+    player.onerror = () => { dlog('Erro carregar áudio', 'error'); toast('Erro áudio'); closePlayer(); };
 
     clearInterval(playerTimer);
     playerTimer = setInterval(() => {

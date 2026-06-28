@@ -1,14 +1,9 @@
 /**
- * MADRASSA ONLINE — ISLAM MOÇAMBIQUE
- * Sala de Aulas — Firebase + LocalStorage Sync v3
- * 
- * CORREÇÃO: Usar .on('value') para capturar TODAS as mensagens (existentes + novas)
- * em vez de .on('child_added') que só pega novas.
+ * MADRASSA ONLINE v4 — FUNCIONAL
+ * Corrigido: áudio, imagem, emojis, sync em tempo real
  */
 
-// ============================================
-// CONFIGURAÇÃO FIREBASE
-// ============================================
+// ========== FIREBASE ==========
 const firebaseConfig = {
     apiKey: "AIzaSyD2rNS7HSJyek3OCrRquudFgqQSWXZJYrY",
     authDomain: "madrassa-online-b851c.firebaseapp.com",
@@ -20,889 +15,612 @@ const firebaseConfig = {
     measurementId: "G-RV9GD4S22T"
 };
 
-try {
-    firebase.initializeApp(firebaseConfig);
-    console.log('Firebase OK');
-} catch (e) {
-    console.error('Firebase erro:', e);
-}
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const st = firebase.storage();
 
-const database = firebase.database();
-const storage = firebase.storage();
+// ========== CONSTANTES ==========
+const SYNC = 'rooms/sala_de_aulas_principal/sync';
+const TYPING = 'rooms/sala_de_aulas_principal/typing';
+const LS_USER = 'madrassa_user';
+const LS_MSGS = 'madrassa_messages';
 
-// ============================================
-// CONSTANTES
-// ============================================
-const ROOM_ID = 'sala_de_aulas_principal';
-const LS_PREFIX = 'madrassa_';
-const LS_USER = LS_PREFIX + 'user';
-const LS_MESSAGES = LS_PREFIX + 'messages';
-const SYNC_PATH = 'rooms/' + ROOM_ID + '/sync';
-const TYPING_PATH = 'rooms/' + ROOM_ID + '/typing';
+const EMOJIS = '😀😃😄😁😆😅😂🤣😊😇🙂🙃😉😌😍🥰😘😗😙😚😋😛😝😜🤪🤨🧐🤓😎🥸🤩🥳😏😒😞😔😟😕🙁☹️😣😖😫😩🥺😢😭😤😠😡🤬🤯😳🥵🥶😱😨😰😥😓🤗🤔🤭🤫🤥😶😐😑😬🙄😯😦😧😮😲🥱😴🤤😪😵🤐🥴🤢🤮🤧😷🤒🤕🤑🤠😈👿👹👺🤡💩👻💀☠️👽👾🤖🎃😺😸😹😻😼😽🙀😿😾🕌🕋🤲🙏☪️✨🌙⭐🌟💫🔥❤️🧡💛💚💙💜🖤🤍🤎💔❣️💕💞💓💗💖💘💝👍👎👌✌️🤞🤟🤘🤙👈👉👆👇☝️👋🤚🖐️✋🖖👏🙌👐🤲🤝🙏✍️💪🦾🦿🦵🦶👂🦻👃🧠🫀🫁🦷🦴👀👁️👅👄👶🧒👦👧🧑👱👨🧔👩🧓👴👵'.split('');
 
-const EMOJIS = [
-    '😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚',
-    '😋','😛','😝','😜','🤪','🤨','🧐','🤓','😎','🥸','🤩','🥳','😏','😒','😞','😔','😟','😕','🙁','☹️',
-    '😣','😖','😫','😩','🥺','😢','😭','😤','😠','😡','🤬','🤯','😳','🥵','🥶','😱','😨','😰','😥','😓',
-    '🤗','🤔','🤭','🤫','🤥','😶','😐','😑','😬','🙄','😯','😦','😧','😮','😲','🥱','😴','🤤','😪','😵',
-    '🤐','🥴','🤢','🤮','🤧','😷','🤒','🤕','🤑','🤠','😈','👿','👹','👺','🤡','💩','👻','💀','☠️','👽',
-    '👾','🤖','🎃','😺','😸','😹','😻','😼','😽','🙀','😿','😾',
-    '🕌','🕋','🤲','🙏','☪️','✨','🌙','⭐','🌟','💫','🔥','❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎',
-    '💔','❣️','💕','💞','💓','💗','💖','💘','💝',
-    '👍','👎','👌','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','👇','☝️','👋','🤚','🖐️','✋','🖖','👏','🙌',
-    '👐','🤝','🙏','✍️','💪','🦾','🦿','🦵','🦶','👂','🦻','👃','🧠','🫀','🫁','🦷','🦴','👀','👁️','👅',
-    '👄','👶','🧒','👦','👧','🧑','👱','👨','🧔','👩','🧓','👴','👵'
-];
-
-// ============================================
-// VARIÁVEIS GLOBAIS
-// ============================================
-let currentUser = null;
-let mediaRecorder = null;
+// ========== VARIÁVEIS ==========
+let me = null;
+let recorder = null;
 let audioChunks = [];
-let isRecording = false;
-let recordingStartTime = null;
-let recordingTimer = null;
-let currentAudio = null;
-let audioPlayerInterval = null;
-let typingTimeout = null;
+let isRec = false;
+let recStart = 0;
+let recTimer = null;
+let player = null;
+let playerTimer = null;
+let typingT = null;
 let isTyping = false;
-let processedIds = new Set();
-let selectedImageFile = null;
-let selectedImageDataUrl = null;
-let lastSyncTimestamp = 0;
+let seen = new Set();
+let imgFile = null;
+let imgData = null;
 
-// ============================================
-// ELEMENTOS DOM
-// ============================================
-const els = {};
+// ========== ELEMENTOS ==========
+function $(id) { return document.getElementById(id); }
 
-function cacheElements() {
-    const ids = [
-        'login-screen','chat-screen','user-name','btn-enter',
-        'messages-area','messages-list','message-input','btn-send',
-        'btn-attach','attach-menu','btn-record','audio-recorder',
-        'recorder-timer','btn-stop-record','btn-cancel-record',
-        'btn-emoji','emoji-picker','image-input',
-        'image-preview-modal','preview-img','btn-confirm-image','btn-cancel-image',
-        'image-viewer-modal','viewer-img','btn-close-viewer',
-        'typing-indicator','typing-text','online-status','toast',
-        'welcome-time','audio-player-modal','btn-close-audio',
-        'btn-play-pause','audio-progress','audio-time',
-        'normal-input','btn-clear','btn-image','btn-camera','emoji-grid'
-    ];
-    ids.forEach(id => {
-        els[id.replace(/-/g, '_')] = document.getElementById(id);
-    });
+// ========== LOCALSTORAGE ==========
+function getMsgs() {
+    try { return JSON.parse(localStorage.getItem(LS_MSGS)) || []; }
+    catch(e) { return []; }
 }
-
-// ============================================
-// LOCALSTORAGE
-// ============================================
-function getLocalMessages() {
-    try {
-        const data = localStorage.getItem(LS_MESSAGES);
-        return data ? JSON.parse(data) : [];
-    } catch (e) {
-        return [];
-    }
+function saveMsgs(msgs) {
+    try { localStorage.setItem(LS_MSGS, JSON.stringify(msgs)); }
+    catch(e) { console.error('LS erro:', e); }
 }
-
-function saveLocalMessages(messages) {
-    try {
-        localStorage.setItem(LS_MESSAGES, JSON.stringify(messages));
-    } catch (e) {
-        console.error('Erro LS:', e);
-    }
-}
-
-function addLocalMessage(msg) {
-    const messages = getLocalMessages();
-    const exists = messages.some(m => m.syncId === msg.syncId);
-    if (exists) return false;
-    messages.push(msg);
-    saveLocalMessages(messages);
+function addMsg(msg) {
+    const msgs = getMsgs();
+    if (msgs.some(m => m.id === msg.id)) return false;
+    msgs.push(msg);
+    saveMsgs(msgs);
     return true;
 }
-
-function clearLocalMessages() {
-    localStorage.removeItem(LS_MESSAGES);
-    processedIds.clear();
-    lastSyncTimestamp = 0;
-    renderAllMessages();
-    showToast('Conversa limpa!');
+function clearMsgs() {
+    localStorage.removeItem(LS_MSGS);
+    seen.clear();
+    renderAll();
+    toast('Conversa limpa!');
 }
 
-// ============================================
-// INICIALIZAÇÃO
-// ============================================
+// ========== INICIALIZAÇÃO ==========
 document.addEventListener('DOMContentLoaded', () => {
-    cacheElements();
-    els.welcome_time.textContent = formatTime(new Date());
-    renderEmojis();
+    $('welcome-time').textContent = fmtTime(new Date());
 
-    const savedUser = localStorage.getItem(LS_USER);
-    if (savedUser) {
+    // Emojis
+    $('emoji-grid').innerHTML = EMOJIS.map(e => '<span onclick="addEmoji(this)">' + e + '</span>').join('');
+
+    // Restaurar usuário
+    const saved = localStorage.getItem(LS_USER);
+    if (saved) {
         try {
-            const userData = JSON.parse(savedUser);
-            els.user_name.value = userData.name || '';
-        } catch (e) {
-            els.user_name.value = savedUser;
-        }
+            const u = JSON.parse(saved);
+            $('user-name').value = u.name || '';
+        } catch(e) { $('user-name').value = saved; }
     }
 
-    setupEventListeners();
-    setupFirebaseConnection();
-    renderAllMessages();
+    bindEvents();
+    bindFirebase();
+    renderAll();
 });
 
-function renderEmojis() {
-    els.emoji_grid.innerHTML = EMOJIS.map(e => `<span>${e}</span>`).join('');
+function addEmoji(el) {
+    $('message-input').value += el.textContent;
+    $('message-input').focus();
+    toggleSendMic();
 }
 
-// ============================================
-// EVENT LISTENERS
-// ============================================
-function setupEventListeners() {
-    els.btn_enter.addEventListener('click', doLogin);
-    els.user_name.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') doLogin();
-    });
+// ========== EVENTOS ==========
+function bindEvents() {
+    // Login
+    $('btn-enter').onclick = login;
+    $('user-name').onkeypress = (e) => { if(e.key==='Enter') login(); };
 
-    els.btn_send.addEventListener('click', sendTextMessage);
-    els.message_input.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendTextMessage();
-        }
-    });
+    // Mensagem
+    $('btn-send').onclick = sendText;
+    $('message-input').onkeypress = (e) => {
+        if(e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendText(); }
+    };
+    $('message-input').oninput = () => { handleTyping(); toggleSendMic(); };
 
-    els.message_input.addEventListener('input', () => {
-        handleTyping();
-        toggleSendMic();
-    });
+    // Anexos
+    $('btn-attach').onclick = (e) => { e.stopPropagation(); toggleAttach(); };
+    document.onclick = (e) => {
+        if(!$('attach-menu').contains(e.target) && e.target!==$('btn-attach')) $('attach-menu').classList.add('hidden');
+        if(!$('emoji-picker').contains(e.target) && e.target!==$('btn-emoji')) $('emoji-picker').classList.add('hidden');
+    };
 
-    els.btn_attach.addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleAttachMenu();
-    });
+    // Imagem
+    $('btn-image').onclick = () => { $('image-input').removeAttribute('capture'); $('image-input').click(); $('attach-menu').classList.add('hidden'); };
+    $('btn-camera').onclick = () => { $('image-input').setAttribute('capture','environment'); $('image-input').click(); $('attach-menu').classList.add('hidden'); };
+    $('image-input').onchange = onImgSelect;
+    $('btn-confirm-image').onclick = sendImg;
+    $('btn-cancel-image').onclick = cancelImg;
+    $('btn-close-viewer').onclick = () => $('image-viewer-modal').classList.add('hidden');
 
-    document.addEventListener('click', (e) => {
-        if (!els.attach_menu.contains(e.target) && e.target !== els.btn_attach) {
-            els.attach_menu.classList.add('hidden');
-        }
-        if (!els.emoji_picker.contains(e.target) && e.target !== els.btn_emoji) {
-            els.emoji_picker.classList.add('hidden');
-        }
-    });
+    // Emoji
+    $('btn-emoji').onclick = (e) => { e.stopPropagation(); toggleEmoji(); };
 
-    els.btn_image.addEventListener('click', () => {
-        els.image_input.removeAttribute('capture');
-        els.image_input.click();
-        els.attach_menu.classList.add('hidden');
-    });
+    // Áudio
+    $('btn-record').onclick = startRec;
+    $('btn-stop-record').onclick = stopRec;
+    $('btn-cancel-record').onclick = cancelRec;
 
-    els.btn_camera.addEventListener('click', () => {
-        els.image_input.setAttribute('capture', 'environment');
-        els.image_input.click();
-        els.attach_menu.classList.add('hidden');
-    });
+    // Player
+    $('btn-close-audio').onclick = closePlayer;
+    $('btn-play-pause').onclick = togglePlay;
+    $('audio-progress').oninput = seekAudio;
 
-    els.image_input.addEventListener('change', handleImageSelect);
-    els.btn_confirm_image.addEventListener('click', sendImageMessage);
-    els.btn_cancel_image.addEventListener('click', cancelImagePreview);
+    // Limpar
+    $('btn-clear').onclick = () => { if(confirm('Limpar conversa?')) clearMsgs(); };
 
-    els.btn_close_viewer.addEventListener('click', () => {
-        els.image_viewer_modal.classList.add('hidden');
-    });
-
-    els.btn_emoji.addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleEmojiPicker();
-    });
-
-    els.emoji_grid.addEventListener('click', (e) => {
-        if (e.target.tagName === 'SPAN') {
-            els.message_input.value += e.target.textContent;
-            els.message_input.focus();
-            toggleSendMic();
-        }
-    });
-
-    els.btn_record.addEventListener('click', startRecording);
-    els.btn_stop_record.addEventListener('click', stopRecording);
-    els.btn_cancel_record.addEventListener('click', cancelRecording);
-
-    els.btn_close_audio.addEventListener('click', closeAudioPlayer);
-    els.btn_play_pause.addEventListener('click', toggleAudioPlayback);
-    els.audio_progress.addEventListener('input', seekAudio);
-
-    els.btn_clear.addEventListener('click', () => {
-        if (confirm('Limpar toda a conversa?')) clearLocalMessages();
-    });
-
-    els.image_preview_modal.addEventListener('click', (e) => {
-        if (e.target === els.image_preview_modal) cancelImagePreview();
-    });
-    els.image_viewer_modal.addEventListener('click', (e) => {
-        if (e.target === els.image_viewer_modal) els.image_viewer_modal.classList.add('hidden');
-    });
-    els.audio_player_modal.addEventListener('click', (e) => {
-        if (e.target === els.audio_player_modal) closeAudioPlayer();
-    });
+    // Fechar modais
+    $('image-preview-modal').onclick = (e) => { if(e.target===$('image-preview-modal')) cancelImg(); };
+    $('image-viewer-modal').onclick = (e) => { if(e.target===$('image-viewer-modal')) $('image-viewer-modal').classList.add('hidden'); };
+    $('audio-player-modal').onclick = (e) => { if(e.target===$('audio-player-modal')) closePlayer(); };
 }
 
 function toggleSendMic() {
-    const hasText = els.message_input.value.trim().length > 0;
-    els.btn_record.classList.toggle('hidden', hasText);
-    els.btn_send.classList.toggle('hidden', !hasText);
+    const has = $('message-input').value.trim().length > 0;
+    $('btn-record').classList.toggle('hidden', has);
+    $('btn-send').classList.toggle('hidden', !has);
 }
+function toggleAttach() { $('attach-menu').classList.toggle('hidden'); $('emoji-picker').classList.add('hidden'); }
+function toggleEmoji() { $('emoji-picker').classList.toggle('hidden'); $('attach-menu').classList.add('hidden'); }
 
-// ============================================
-// LOGIN
-// ============================================
-function doLogin() {
-    const name = els.user_name.value.trim();
-    if (!name || name.length < 2) {
-        showToast('Digite seu nome completo');
-        return;
-    }
+// ========== LOGIN ==========
+function login() {
+    const name = $('user-name').value.trim();
+    if(!name || name.length<2) { toast('Digite seu nome'); return; }
 
-    currentUser = {
-        name: name,
-        id: 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
-    };
+    me = { name:name, id:'u'+Date.now()+'_'+Math.random().toString(36).substr(2,6) };
+    localStorage.setItem(LS_USER, JSON.stringify(me));
 
-    localStorage.setItem(LS_USER, JSON.stringify(currentUser));
-
-    els.login_screen.classList.remove('active');
+    $('login-screen').classList.remove('active');
     setTimeout(() => {
-        els.chat_screen.classList.add('active');
-        els.message_input.focus();
+        $('chat-screen').classList.add('active');
+        $('message-input').focus();
     }, 300);
 
-    showToast('Bem-vindo, ' + name + '!');
-    connectToRoom();
+    toast('Bem-vindo, ' + name + '!');
+    connectRoom();
 }
 
-// ============================================
-// FIREBASE — CONEXÃO
-// ============================================
-function setupFirebaseConnection() {
-    const connectedRef = database.ref('.info/connected');
-    connectedRef.on('value', (snap) => {
-        const connected = snap.val();
-        if (connected) {
-            els.online_status.textContent = 'Online';
-            els.online_status.style.color = '#25D366';
-        } else {
-            els.online_status.textContent = 'Offline';
-            els.online_status.style.color = '#ff4444';
-        }
+// ========== FIREBASE CONEXÃO ==========
+function bindFirebase() {
+    db.ref('.info/connected').on('value', (s) => {
+        const on = s.val();
+        $('online-status').textContent = on ? 'Online' : 'Offline';
+        $('online-status').style.color = on ? '#25D366' : '#ff4444';
     });
 
-    const savedUser = localStorage.getItem(LS_USER);
-    if (savedUser) {
+    // Auto-login se já tem usuário
+    const saved = localStorage.getItem(LS_USER);
+    if(saved) {
         try {
-            currentUser = JSON.parse(savedUser);
-            els.login_screen.classList.remove('active');
-            els.chat_screen.classList.add('active');
-            connectToRoom();
-        } catch (e) {
-            console.error('Erro restore user:', e);
-        }
+            me = JSON.parse(saved);
+            $('login-screen').classList.remove('active');
+            $('chat-screen').classList.add('active');
+            connectRoom();
+        } catch(e) {}
     }
 }
 
-// ============================================
-// FIREBASE — SINCRONIZAÇÃO CORRIGIDA
-// ============================================
-function connectToRoom() {
-    if (!currentUser) {
-        console.error('Sem usuário');
-        return;
-    }
+// ========== SINCRONIZAÇÃO ==========
+function connectRoom() {
+    if(!me) return;
+    console.log('Conectando...');
 
-    console.log('Conectando sala:', ROOM_ID);
-    console.log('Path:', SYNC_PATH);
-    console.log('User:', currentUser.name, currentUser.id);
+    // Listener principal: .on('value') pega TUDO
+    db.ref(SYNC).limitToLast(50).on('value', (snap) => {
+        const data = snap.val();
+        if(!data) return;
 
-    // === MÉTODO CORRETO: Usar .on('value') para pegar TUDO ===
-    // .on('value') dispara sempre que QUALQUER dado muda no nó
-    // Isso garante que vemos mensagens antigas E novas
+        const keys = Object.keys(data);
+        let novas = 0;
 
-    const syncRef = database.ref(SYNC_PATH);
+        keys.forEach(k => {
+            const d = data[k];
+            if(!d || d.senderId===me.id) return;
+            if(seen.has(d.id || d.syncId)) return;
 
-    syncRef.limitToLast(50).on('value', (snapshot) => {
-        console.log('📨 VALUE event recebido!');
-
-        const allData = snapshot.val();
-        if (!allData) {
-            console.log('Nó vazio');
-            return;
-        }
-
-        const keys = Object.keys(allData);
-        console.log('Total mensagens no Firebase:', keys.length);
-
-        let newCount = 0;
-
-        keys.forEach(key => {
-            const syncData = allData[key];
-            if (!syncData) return;
-
-            // Ignorar mensagens do próprio usuário
-            if (syncData.senderId === currentUser.id) return;
-
-            // Ignorar já processadas
-            if (processedIds.has(syncData.syncId)) return;
-            processedIds.add(syncData.syncId);
+            const id = d.id || d.syncId || k;
+            seen.add(id);
 
             const msg = {
-                syncId: syncData.syncId,
-                type: syncData.type,
-                sender: syncData.sender,
-                senderId: syncData.senderId,
-                timestamp: syncData.timestamp,
-                text: syncData.text || null,
-                imageUrl: syncData.imageUrl || null,
-                audioUrl: syncData.audioUrl || null,
-                duration: syncData.duration || null
+                id: id,
+                type: d.type,
+                sender: d.sender,
+                senderId: d.senderId,
+                time: d.timestamp || Date.now(),
+                text: d.text || null,
+                img: d.imageUrl || null,
+                audio: d.audioUrl || null,
+                dur: d.duration || 0
             };
 
-            const added = addLocalMessage(msg);
-            if (added) {
-                renderMessage(msg);
-                newCount++;
-
-                if (document.hidden) {
-                    showToast('💬 ' + syncData.sender + ': ' + (syncData.text || 'mídia').substring(0, 30));
-                }
+            if(addMsg(msg)) {
+                renderMsg(msg);
+                novas++;
             }
         });
 
-        if (newCount > 0) {
-            console.log('Novas mensagens recebidas:', newCount);
-            scrollToBottom();
-        }
-
-    }, (error) => {
-        console.error('ERRO NO LISTENER:', error.code, error.message);
-        showToast('Erro: ' + error.message);
+        if(novas>0) scrollBottom();
+    }, (err) => {
+        console.error('Erro sync:', err);
+        toast('Erro de conexão');
     });
 
-    // === TYPING ===
-    const typingRef = database.ref(TYPING_PATH);
-    typingRef.child(currentUser.id).remove();
-
-    typingRef.on('value', (snapshot) => {
-        const typings = snapshot.val();
-        if (!typings) {
-            els.typing_indicator.classList.add('hidden');
-            return;
-        }
-
-        const others = Object.keys(typings).filter(id => id !== currentUser.id);
-        if (others.length > 0) {
-            const names = others.map(id => typings[id].name).join(', ');
-            els.typing_text.textContent = others.length === 1 ? names + ' está digitando' : names + ' estão digitando';
-            els.typing_indicator.classList.remove('hidden');
-            scrollToBottom();
+    // Typing
+    db.ref(TYPING).on('value', (snap) => {
+        const t = snap.val();
+        if(!t) { $('typing-indicator').classList.add('hidden'); return; }
+        const others = Object.keys(t).filter(id => id!==me.id);
+        if(others.length>0) {
+            const names = others.map(id => t[id].name).join(', ');
+            $('typing-text').textContent = others.length===1 ? names+' está digitando' : names+' estão digitando';
+            $('typing-indicator').classList.remove('hidden');
+            scrollBottom();
         } else {
-            els.typing_indicator.classList.add('hidden');
+            $('typing-indicator').classList.add('hidden');
         }
     });
 
-    console.log('Listener ativo!');
+    // Limpar typing ao sair
+    window.onbeforeunload = () => { if(me) db.ref(TYPING+'/'+me.id).remove(); };
 }
 
-// ============================================
-// PUBLICAR NO FIREBASE
-// ============================================
-function publishToFirebase(msg) {
-    console.log('Publicando:', msg.syncId);
-
-    const syncData = {
-        syncId: msg.syncId,
+function pub(msg) {
+    const data = {
+        id: msg.id,
+        syncId: msg.id,
         type: msg.type,
         sender: msg.sender,
         senderId: msg.senderId,
-        timestamp: msg.timestamp,
-        text: msg.text || null,
-        imageUrl: msg.imageUrl || null,
-        audioUrl: msg.audioUrl || null,
-        duration: msg.duration || null
+        timestamp: msg.time,
+        text: msg.text,
+        imageUrl: msg.img,
+        audioUrl: msg.audio,
+        duration: msg.dur
     };
-
-    return database.ref(SYNC_PATH).push(syncData)
-        .then(() => console.log('Publicado OK'))
-        .catch(err => {
-            console.error('Erro publicar:', err.code, err.message);
-            showToast('Erro ao enviar: ' + err.message);
-            throw err;
-        });
+    return db.ref(SYNC).push(data);
 }
 
-// ============================================
-// ENVIAR MENSAGEM DE TEXTO
-// ============================================
-function sendTextMessage() {
-    const text = els.message_input.value.trim();
-    if (!text || !currentUser) return;
+// ========== ENVIAR TEXTO ==========
+function sendText() {
+    const text = $('message-input').value.trim();
+    if(!text || !me) return;
 
-    const msg = createMessage('text', { text: text });
+    const msg = mkMsg('text', {text:text});
+    addMsg(msg);
+    renderMsg(msg);
+    scrollBottom();
 
-    addLocalMessage(msg);
-    renderMessage(msg);
-    scrollToBottom();
-
-    els.message_input.value = '';
+    $('message-input').value = '';
     toggleSendMic();
     stopTyping();
 
-    publishToFirebase(msg);
+    pub(msg).catch(e => toast('Erro ao enviar'));
 }
 
-// ============================================
-// ENVIAR IMAGEM
-// ============================================
-function handleImageSelect(e) {
-    const file = e.target.files[0];
-    if (!file) return;
+// ========== IMAGEM ==========
+function onImgSelect(e) {
+    const f = e.target.files[0];
+    if(!f) return;
+    if(f.size > 8*1024*1024) { toast('Máx 8MB'); return; }
 
-    if (file.size > 8 * 1024 * 1024) {
-        showToast('Imagem muito grande. Máx 8MB.');
-        return;
-    }
-
-    selectedImageFile = file;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        selectedImageDataUrl = e.target.result;
-        els.preview_img.src = selectedImageDataUrl;
-        els.image_preview_modal.classList.remove('hidden');
+    imgFile = f;
+    const r = new FileReader();
+    r.onload = (ev) => {
+        imgData = ev.target.result;
+        $('preview-img').src = imgData;
+        $('image-preview-modal').classList.remove('hidden');
     };
-    reader.readAsDataURL(file);
+    r.readAsDataURL(f);
 }
 
-function cancelImagePreview() {
-    els.image_preview_modal.classList.add('hidden');
-    els.image_input.value = '';
-    selectedImageFile = null;
-    selectedImageDataUrl = null;
+function cancelImg() {
+    $('image-preview-modal').classList.add('hidden');
+    $('image-input').value = '';
+    imgFile = null; imgData = null;
 }
 
-async function sendImageMessage() {
-    if (!selectedImageFile || !currentUser) return;
-
-    els.btn_confirm_image.textContent = 'Enviando...';
-    els.btn_confirm_image.disabled = true;
+async function sendImg() {
+    if(!imgFile || !me) return;
+    $('btn-confirm-image').textContent = 'Enviando...';
+    $('btn-confirm-image').disabled = true;
 
     try {
-        showToast('Comprimindo...');
-        const compressedBlob = await compressImage(selectedImageFile);
+        toast('Comprimindo...');
+        const blob = await compressImg(imgFile);
 
-        const fileName = 'images/' + Date.now() + '_' + Math.random().toString(36).substr(2, 8) + '.jpg';
-        const storageRef = storage.ref(fileName);
+        const name = 'img/'+Date.now()+'_'+Math.random().toString(36).substr(2,8)+'.jpg';
+        const ref = st.ref(name);
 
-        await storageRef.put(compressedBlob);
-        const downloadURL = await storageRef.getDownloadURL();
+        await ref.put(blob);
+        const url = await ref.getDownloadURL();
+        console.log('IMG URL:', url);
 
-        const msg = createMessage('image', { imageUrl: downloadURL });
+        const msg = mkMsg('image', {img:url});
+        addMsg(msg);
+        renderMsg(msg);
+        scrollBottom();
 
-        addLocalMessage(msg);
-        renderMessage(msg);
-        scrollToBottom();
+        await pub(msg);
+        cancelImg();
+        toast('Imagem enviada!');
 
-        await publishToFirebase(msg);
-
-        cancelImagePreview();
-        showToast('Imagem enviada!');
-
-    } catch (error) {
-        console.error('Erro imagem:', error);
-        showToast('Erro: ' + error.message);
+    } catch(e) {
+        console.error('Erro img:', e);
+        toast('Erro: '+e.message);
     } finally {
-        els.btn_confirm_image.textContent = 'Enviar';
-        els.btn_confirm_image.disabled = false;
+        $('btn-confirm-image').textContent = 'Enviar';
+        $('btn-confirm-image').disabled = false;
     }
 }
 
-function compressImage(file) {
+function compressImg(file) {
     return new Promise((resolve, reject) => {
         const img = new Image();
-        const reader = new FileReader();
-
-        reader.onload = (e) => { img.src = e.target.result; };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
+        const r = new FileReader();
+        r.onload = (e) => { img.src = e.target.result; };
+        r.onerror = reject;
+        r.readAsDataURL(file);
 
         img.onload = () => {
-            const canvas = document.createElement('canvas');
+            const c = document.createElement('canvas');
             const MAX = 1200;
             let w = img.width, h = img.height;
-
-            if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }}
-            else { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; }}
-
-            canvas.width = w; canvas.height = h;
-            const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#FFF';
-            ctx.fillRect(0, 0, w, h);
-            ctx.drawImage(img, 0, 0, w, h);
-
-            canvas.toBlob((blob) => {
-                if (blob) resolve(blob);
-                else reject(new Error('Falha'));
-            }, 'image/jpeg', 0.75);
+            if(w>h){ if(w>MAX){ h=Math.round(h*MAX/w); w=MAX; }}
+            else { if(h>MAX){ w=Math.round(w*MAX/h); h=MAX; }}
+            c.width=w; c.height=h;
+            const ctx = c.getContext('2d');
+            ctx.fillStyle='#FFF'; ctx.fillRect(0,0,w,h);
+            ctx.drawImage(img,0,0,w,h);
+            c.toBlob((b) => { if(b) resolve(b); else reject('Falha'); }, 'image/jpeg', 0.75);
         };
         img.onerror = reject;
     });
 }
 
-// ============================================
-// GRAVAR E ENVIAR ÁUDIO
-// ============================================
-async function startRecording() {
-    if (!navigator.mediaDevices || !window.MediaRecorder) {
-        showToast('Navegador não suporta gravação');
-        return;
+// ========== ÁUDIO ==========
+async function startRec() {
+    if(!navigator.mediaDevices || !window.MediaRecorder) {
+        toast('Navegador não suporta áudio'); return;
     }
 
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
-            audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 22050 }
+            audio: { echoCancellation:true, noiseSuppression:true, sampleRate:22050 }
         });
 
-        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
             ? 'audio/webm;codecs=opus' : 'audio/webm';
 
-        mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType });
+        recorder = new MediaRecorder(stream, {mimeType:mime});
         audioChunks = [];
 
-        mediaRecorder.ondataavailable = (e) => {
-            if (e.data.size > 0) audioChunks.push(e.data);
+        recorder.ondataavailable = (e) => {
+            console.log('Audio chunk:', e.data.size, 'bytes');
+            if(e.data.size>0) audioChunks.push(e.data);
         };
 
-        mediaRecorder.onstop = async () => {
-            const blob = new Blob(audioChunks, { type: 'audio/webm' });
-            await uploadAudio(blob);
-            stream.getTracks().forEach(t => t.stop());
+        recorder.onstop = async () => {
+            console.log('Gravação parada. Chunks:', audioChunks.length);
+            const blob = new Blob(audioChunks, {type:'audio/webm'});
+            console.log('Blob size:', blob.size);
+            if(blob.size>0) await uploadAudio(blob);
+            stream.getTracks().forEach(t=>t.stop());
         };
 
-        mediaRecorder.onerror = (e) => {
-            console.error('Erro recorder:', e);
-            showToast('Erro na gravação');
-            cancelRecordingUI();
+        recorder.onerror = (e) => {
+            console.error('Recorder erro:', e);
+            toast('Erro na gravação');
+            cancelRecUI();
         };
 
-        mediaRecorder.start(100);
-        isRecording = true;
-        recordingStartTime = Date.now();
-        showRecordingUI();
+        recorder.start(100);
+        isRec = true;
+        recStart = Date.now();
+        showRecUI();
 
-    } catch (err) {
-        console.error('Erro gravar:', err);
-        showToast('Permita acesso ao microfone');
+    } catch(err) {
+        console.error('Erro mic:', err);
+        toast('Permita acesso ao microfone');
     }
 }
 
-function showRecordingUI() {
-    els.audio_recorder.classList.remove('hidden');
-    els.normal_input.classList.add('hidden');
-    startRecordingTimer();
-}
-
-function cancelRecordingUI() {
-    els.audio_recorder.classList.add('hidden');
-    els.normal_input.classList.remove('hidden');
-    clearInterval(recordingTimer);
-    els.recorder_timer.textContent = '00:00';
-}
-
-function startRecordingTimer() {
-    recordingTimer = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
-        const m = Math.floor(elapsed / 60).toString().padStart(2, '0');
-        const s = (elapsed % 60).toString().padStart(2, '0');
-        els.recorder_timer.textContent = m + ':' + s;
-        if (elapsed >= 300) stopRecording();
+function showRecUI() {
+    $('audio-recorder').classList.remove('hidden');
+    $('normal-input').classList.add('hidden');
+    recTimer = setInterval(() => {
+        const s = Math.floor((Date.now()-recStart)/1000);
+        const m = Math.floor(s/60).toString().padStart(2,'0');
+        const sec = (s%60).toString().padStart(2,'0');
+        $('recorder-timer').textContent = m+':'+sec;
+        if(s>=300) stopRec();
     }, 1000);
 }
 
-function stopRecording() {
-    if (!isRecording || !mediaRecorder) return;
-    if (mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-    isRecording = false;
-    clearInterval(recordingTimer);
-    cancelRecordingUI();
+function cancelRecUI() {
+    $('audio-recorder').classList.add('hidden');
+    $('normal-input').classList.remove('hidden');
+    clearInterval(recTimer);
+    $('recorder-timer').textContent = '00:00';
 }
 
-function cancelRecording() {
-    if (!isRecording || !mediaRecorder) return;
-    if (mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-    isRecording = false;
-    clearInterval(recordingTimer);
+function stopRec() {
+    if(!isRec || !recorder) return;
+    if(recorder.state!=='inactive') recorder.stop();
+    isRec = false;
+    clearInterval(recTimer);
+    cancelRecUI();
+}
+
+function cancelRec() {
+    if(!isRec || !recorder) return;
+    if(recorder.state!=='inactive') recorder.stop();
+    isRec = false;
+    clearInterval(recTimer);
     audioChunks = [];
-    cancelRecordingUI();
+    cancelRecUI();
 }
 
-async function uploadAudio(audioBlob) {
-    if (audioBlob.size === 0) return;
-    const duration = Math.floor((Date.now() - recordingStartTime) / 1000);
+async function uploadAudio(blob) {
+    console.log('Upload audio. Size:', blob.size);
+    if(blob.size===0) { toast('Áudio vazio'); return; }
 
-    showToast('Enviando áudio...');
+    const dur = Math.floor((Date.now()-recStart)/1000);
+    toast('Enviando áudio...');
 
     try {
-        const fileName = 'audio/' + Date.now() + '_' + Math.random().toString(36).substr(2, 8) + '.webm';
-        const storageRef = storage.ref(fileName);
+        const name = 'audio/'+Date.now()+'_'+Math.random().toString(36).substr(2,8)+'.webm';
+        const ref = st.ref(name);
 
-        await storageRef.put(audioBlob);
-        const downloadURL = await storageRef.getDownloadURL();
+        await ref.put(blob);
+        const url = await ref.getDownloadURL();
+        console.log('Audio URL:', url);
 
-        const msg = createMessage('audio', { audioUrl: downloadURL, duration: duration });
+        const msg = mkMsg('audio', {audio:url, dur:dur});
+        addMsg(msg);
+        renderMsg(msg);
+        scrollBottom();
 
-        addLocalMessage(msg);
-        renderMessage(msg);
-        scrollToBottom();
+        await pub(msg);
+        toast('Áudio enviado!');
 
-        await publishToFirebase(msg);
-
-        showToast('Áudio enviado!');
-
-    } catch (error) {
-        console.error('Erro áudio:', error);
-        showToast('Erro ao enviar áudio');
+    } catch(e) {
+        console.error('Erro audio:', e);
+        toast('Erro ao enviar áudio');
     }
 }
 
-// ============================================
-// CRIAR MENSAGEM
-// ============================================
-function createMessage(type, data) {
+// ========== CRIAR MENSAGEM ==========
+function mkMsg(type, data) {
     return {
-        syncId: 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+        id: 'm'+Date.now()+'_'+Math.random().toString(36).substr(2,6),
         type: type,
-        sender: currentUser.name,
-        senderId: currentUser.id,
-        timestamp: Date.now(),
+        sender: me.name,
+        senderId: me.id,
+        time: Date.now(),
         text: data.text || null,
-        imageUrl: data.imageUrl || null,
-        audioUrl: data.audioUrl || null,
-        duration: data.duration || null
+        img: data.img || null,
+        audio: data.audio || null,
+        dur: data.dur || 0
     };
 }
 
-// ============================================
-// RENDERIZAR MENSAGENS
-// ============================================
-function renderAllMessages() {
-    els.messages_list.innerHTML = '';
-    processedIds.clear();
-
-    const messages = getLocalMessages();
-    messages.sort((a, b) => a.timestamp - b.timestamp);
-
-    messages.forEach(msg => {
-        processedIds.add(msg.syncId);
-        renderMessage(msg, false);
-    });
-
-    scrollToBottom();
+// ========== RENDERIZAR ==========
+function renderAll() {
+    $('messages-list').innerHTML = '';
+    seen.clear();
+    const msgs = getMsgs();
+    msgs.sort((a,b) => a.time - b.time);
+    msgs.forEach(m => { seen.add(m.id); renderMsg(m, false); });
+    scrollBottom();
 }
 
-function renderMessage(msg, animate) {
-    const isMe = msg.senderId === (currentUser ? currentUser.id : null);
-
-    const existing = document.querySelector('[data-sync-id="' + msg.syncId + '"]');
-    if (existing) return;
+function renderMsg(msg, anim) {
+    const isMe = msg.senderId === (me ? me.id : null);
+    if(document.querySelector('[data-id="'+msg.id+'"]')) return;
 
     const div = document.createElement('div');
-    div.className = 'message ' + (isMe ? 'me' : 'other');
-    div.dataset.syncId = msg.syncId;
-    if (animate !== false) div.style.animation = 'messageIn 0.25s ease';
+    div.className = 'message ' + (isMe?'me':'other');
+    div.dataset.id = msg.id;
+    if(anim!==false) div.style.animation = 'msgIn 0.25s ease';
 
-    const time = formatTime(new Date(msg.timestamp));
-    let content = '';
+    const t = fmtTime(new Date(msg.time));
+    let html = '';
 
-    if (!isMe) {
-        content += '<div class="message-sender">' + escapeHtml(msg.sender) + '</div>';
+    if(!isMe) html += '<div class="msg-sender">'+esc(msg.sender)+'</div>';
+
+    if(msg.type==='text') {
+        html += '<div class="msg-text">'+esc(msg.text)+'</div>';
+    }
+    else if(msg.type==='image') {
+        if(msg.img) html += '<img class="msg-img" src="'+msg.img+'" onclick="viewImg(\''+msg.img+'\')">';
+    }
+    else if(msg.type==='audio') {
+        const d = fmtDur(msg.dur);
+        html += '<div class="msg-audio" onclick="playAudio(\''+msg.audio+'\','+msg.dur+')">'+
+            '<div class="aud-icon">▶️</div>'+
+            '<div class="aud-info">'+
+            '<div class="aud-wave"><span></span><span></span><span></span><span></span><span></span></div>'+
+            '<div class="aud-dur">'+d+'</div></div></div>';
     }
 
-    switch (msg.type) {
-        case 'text':
-            content += '<div class="message-text">' + escapeHtml(msg.text) + '</div>';
-            break;
-        case 'image':
-            if (msg.imageUrl) {
-                content += '<img class="message-image" src="' + msg.imageUrl + '" alt="Imagem" loading="lazy" onclick="window.viewImage(&quot;' + msg.imageUrl + '&quot;)">';
-            }
-            break;
-        case 'audio':
-            const dur = formatDuration(msg.duration || 0);
-            content += '<div class="message-audio" onclick="window.playAudio(&quot;' + msg.audioUrl + '&quot;, ' + (msg.duration || 0) + ')">' +
-                '<div class="audio-icon">▶️</div>' +
-                '<div class="audio-info">' +
-                '<div class="audio-wave"><span></span><span></span><span></span><span></span><span></span></div>' +
-                '<div class="audio-duration">' + dur + '</div></div></div>';
-            break;
-    }
+    html += '<div class="msg-meta"><span class="msg-time">'+t+'</span>'+(isMe?'<span class="msg-check">✓✓</span>':'')+'</div>';
 
-    content += '<div class="message-meta"><span class="message-time">' + time + '</span>' +
-        (isMe ? '<span class="message-checks">✓✓</span>' : '') + '</div>';
-
-    div.innerHTML = content;
-    els.messages_list.appendChild(div);
+    div.innerHTML = html;
+    $('messages-list').appendChild(div);
 }
 
-// ============================================
-// REPRODUTOR DE ÁUDIO
-// ============================================
-window.playAudio = function(url, duration) {
-    if (currentAudio) { currentAudio.pause(); currentAudio.currentTime = 0; }
+// ========== PLAYER ÁUDIO ==========
+window.playAudio = function(url, dur) {
+    if(player) { player.pause(); player.currentTime=0; }
 
-    currentAudio = new Audio(url);
-    els.audio_player_modal.classList.remove('hidden');
-    els.btn_play_pause.textContent = '⏸️';
-    els.audio_progress.value = 0;
-    els.audio_progress.max = duration || 100;
+    player = new Audio(url);
+    $('audio-player-modal').classList.remove('hidden');
+    $('btn-play-pause').textContent = '⏸️';
+    $('audio-progress').value = 0;
+    $('audio-progress').max = dur || 100;
 
-    currentAudio.play().catch(() => showToast('Erro ao reproduzir'));
+    player.play().catch(() => toast('Erro ao reproduzir'));
 
-    currentAudio.onended = () => {
-        els.btn_play_pause.textContent = '▶️';
-        clearInterval(audioPlayerInterval);
+    player.onended = () => {
+        $('btn-play-pause').textContent = '▶️';
+        clearInterval(playerTimer);
     };
+    player.onerror = () => { toast('Erro áudio'); closePlayer(); };
 
-    currentAudio.onerror = () => { showToast('Erro ao carregar'); closeAudioPlayer(); };
-
-    clearInterval(audioPlayerInterval);
-    audioPlayerInterval = setInterval(() => {
-        if (currentAudio && !currentAudio.paused) {
-            els.audio_progress.value = currentAudio.currentTime;
-            els.audio_time.textContent = formatDuration(Math.floor(currentAudio.currentTime)) + ' / ' + formatDuration(duration);
+    clearInterval(playerTimer);
+    playerTimer = setInterval(() => {
+        if(player && !player.paused) {
+            $('audio-progress').value = player.currentTime;
+            $('audio-time').textContent = fmtDur(Math.floor(player.currentTime))+' / '+fmtDur(dur);
         }
     }, 500);
 };
 
-function toggleAudioPlayback() {
-    if (!currentAudio) return;
-    if (currentAudio.paused) {
-        currentAudio.play().catch(() => showToast('Erro'));
-        els.btn_play_pause.textContent = '⏸️';
-    } else {
-        currentAudio.pause();
-        els.btn_play_pause.textContent = '▶️';
-    }
+function togglePlay() {
+    if(!player) return;
+    if(player.paused) { player.play().catch(()=>{}); $('btn-play-pause').textContent='⏸️'; }
+    else { player.pause(); $('btn-play-pause').textContent='▶️'; }
+}
+function seekAudio() { if(player) player.currentTime = parseFloat($('audio-progress').value); }
+function closePlayer() {
+    if(player) { player.pause(); player.currentTime=0; player=null; }
+    clearInterval(playerTimer);
+    $('audio-player-modal').classList.add('hidden');
 }
 
-function seekAudio() {
-    if (currentAudio) currentAudio.currentTime = parseFloat(els.audio_progress.value);
-}
-
-function closeAudioPlayer() {
-    if (currentAudio) { currentAudio.pause(); currentAudio.currentTime = 0; currentAudio = null; }
-    clearInterval(audioPlayerInterval);
-    els.audio_player_modal.classList.add('hidden');
-}
-
-// ============================================
-// VISUALIZADOR DE IMAGEM
-// ============================================
-window.viewImage = function(url) {
-    els.viewer_img.src = url;
-    els.image_viewer_modal.classList.remove('hidden');
+// ========== VIEWER IMAGEM ==========
+window.viewImg = function(url) {
+    $('viewer-img').src = url;
+    $('image-viewer-modal').classList.remove('hidden');
 };
 
-// ============================================
-// TYPING
-// ============================================
+// ========== TYPING ==========
 function handleTyping() {
-    if (!currentUser) return;
-
-    if (!isTyping && els.message_input.value.length > 0) {
+    if(!me) return;
+    if(!isTyping && $('message-input').value.length>0) {
         isTyping = true;
-        database.ref(TYPING_PATH + '/' + currentUser.id).set({
-            name: currentUser.name,
-            timestamp: firebase.database.ServerValue.TIMESTAMP
-        });
+        db.ref(TYPING+'/'+me.id).set({name:me.name, timestamp:firebase.database.ServerValue.TIMESTAMP});
     }
-
-    clearTimeout(typingTimeout);
-    typingTimeout = setTimeout(stopTyping, 2500);
+    clearTimeout(typingT);
+    typingT = setTimeout(stopTyping, 2500);
 }
-
 function stopTyping() {
-    if (!isTyping || !currentUser) return;
+    if(!isTyping || !me) return;
     isTyping = false;
-    database.ref(TYPING_PATH + '/' + currentUser.id).remove();
+    db.ref(TYPING+'/'+me.id).remove();
 }
 
-// ============================================
-// MENUS
-// ============================================
-function toggleAttachMenu() {
-    els.attach_menu.classList.toggle('hidden');
-    els.emoji_picker.classList.add('hidden');
+// ========== UTILS ==========
+function scrollBottom() {
+    requestAnimationFrame(() => { $('messages-area').scrollTop = $('messages-area').scrollHeight; });
 }
-
-function toggleEmojiPicker() {
-    els.emoji_picker.classList.toggle('hidden');
-    els.attach_menu.classList.add('hidden');
+function fmtTime(d) {
+    try { return d.toLocaleTimeString('pt-MZ',{hour:'2-digit',minute:'2-digit'}); }
+    catch { const h=d.getHours().toString().padStart(2,'0'); const m=d.getMinutes().toString().padStart(2,'0'); return h+':'+m; }
 }
-
-// ============================================
-// UTILITÁRIOS
-// ============================================
-function scrollToBottom() {
-    requestAnimationFrame(() => {
-        els.messages_area.scrollTop = els.messages_area.scrollHeight;
-    });
+function fmtDur(s) {
+    if(!s || s<0) s=0;
+    const m=Math.floor(s/60).toString().padStart(2,'0');
+    const sec=(s%60).toString().padStart(2,'0');
+    return m+':'+sec;
 }
+function esc(t) { if(!t)return''; const d=document.createElement('div'); d.textContent=t; return d.innerHTML; }
 
-function formatTime(date) {
-    try {
-        return date.toLocaleTimeString('pt-MZ', { hour: '2-digit', minute: '2-digit' });
-    } catch {
-        const h = date.getHours().toString().padStart(2, '0');
-        const m = date.getMinutes().toString().padStart(2, '0');
-        return h + ':' + m;
-    }
+let toastT = null;
+function toast(m) {
+    $('toast').textContent = m;
+    $('toast').classList.remove('hidden');
+    clearTimeout(toastT);
+    toastT = setTimeout(() => $('toast').classList.add('hidden'), 3000);
 }
-
-function formatDuration(seconds) {
-    if (!seconds || seconds < 0) seconds = 0;
-    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
-    const s = (seconds % 60).toString().padStart(2, '0');
-    return m + ':' + s;
-}
-
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-let toastTimeout = null;
-function showToast(message) {
-    els.toast.textContent = message;
-    els.toast.classList.remove('hidden');
-    clearTimeout(toastTimeout);
-    toastTimeout = setTimeout(() => { els.toast.classList.add('hidden'); }, 2800);
-}
-
-// ============================================
-// LIMPEZA
-// ============================================
-window.addEventListener('beforeunload', () => {
-    if (currentUser) database.ref(TYPING_PATH + '/' + currentUser.id).remove();
-});
-
-document.addEventListener('visibilitychange', () => {
-    if (document.hidden && currentUser) {
-        database.ref(TYPING_PATH + '/' + currentUser.id).remove();
-        isTyping = false;
-    }
-});

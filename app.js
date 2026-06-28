@@ -1,9 +1,10 @@
 /**
- * MADRASSA ONLINE v5 — COM DIAGNÓSTICO VISUAL PARA CELULAR
- * Botão DEBUG no canto superior direito mostra logs na tela
+ * MADRASSA ONLINE v6 — ÁUDIO CORRIGIDO PARA CELULAR
+ * Problema: MediaRecorder no mobile precisa de timeslice e mimeType correto
+ * Solução: Usar timeslice maior, verificar suporte de mimeType, fallback para wav
  */
 
-// ========== DIAGNÓSTICO VISUAL (para celular, sem F12) ==========
+// ========== DIAGNÓSTICO VISUAL ==========
 let debugVisible = false;
 function toggleDebug() {
     debugVisible = !debugVisible;
@@ -11,16 +12,13 @@ function toggleDebug() {
 }
 function dlog(msg, type='info') {
     const div = document.getElementById('debug-logs');
+    if(!div) return;
     const line = document.createElement('div');
     const time = new Date().toLocaleTimeString('pt-MZ');
     line.style.cssText = 'border-bottom:1px solid #333; padding:2px 0; color:' + (type==='error'?'#ff4444':type==='warn'?'#ffaa00':'#00ff88');
     line.textContent = '[' + time + '] ' + msg;
     div.appendChild(line);
     div.scrollTop = div.scrollHeight;
-    // Também no console real (se disponível)
-    if(type==='error') console.error(msg);
-    else if(type==='warn') console.warn(msg);
-    else console.log(msg);
 }
 
 // ========== FIREBASE ==========
@@ -37,9 +35,9 @@ const firebaseConfig = {
 
 try {
     firebase.initializeApp(firebaseConfig);
-    dlog('Firebase inicializado OK');
+    dlog('Firebase OK');
 } catch (e) {
-    dlog('ERRO Firebase: ' + e.message, 'error');
+    dlog('Firebase erro: ' + e.message, 'error');
 }
 
 const db = firebase.database();
@@ -101,7 +99,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Emojis
     $('emoji-grid').innerHTML = EMOJIS.map(e => '<span onclick="addEmoji(this)">' + e + '</span>').join('');
-    dlog('Emojis carregados: ' + EMOJIS.length);
 
     // Restaurar usuário
     const saved = localStorage.getItem(LS_USER);
@@ -109,7 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const u = JSON.parse(saved);
             $('user-name').value = u.name || '';
-            dlog('Usuário salvo encontrado: ' + u.name);
+            dlog('Usuário: ' + u.name);
         } catch(e) { $('user-name').value = saved; }
     }
 
@@ -126,25 +123,21 @@ function addEmoji(el) {
 
 // ========== EVENTOS ==========
 function bindEvents() {
-    // Login
     $('btn-enter').onclick = login;
     $('user-name').onkeypress = (e) => { if(e.key==='Enter') login(); };
 
-    // Mensagem
     $('btn-send').onclick = sendText;
     $('message-input').onkeypress = (e) => {
         if(e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendText(); }
     };
     $('message-input').oninput = () => { handleTyping(); toggleSendMic(); };
 
-    // Anexos
     $('btn-attach').onclick = (e) => { e.stopPropagation(); toggleAttach(); };
     document.onclick = (e) => {
         if(!$('attach-menu').contains(e.target) && e.target!==$('btn-attach')) $('attach-menu').classList.add('hidden');
         if(!$('emoji-picker').contains(e.target) && e.target!==$('btn-emoji')) $('emoji-picker').classList.add('hidden');
     };
 
-    // Imagem
     $('btn-image').onclick = () => { $('image-input').removeAttribute('capture'); $('image-input').click(); $('attach-menu').classList.add('hidden'); };
     $('btn-camera').onclick = () => { $('image-input').setAttribute('capture','environment'); $('image-input').click(); $('attach-menu').classList.add('hidden'); };
     $('image-input').onchange = onImgSelect;
@@ -152,23 +145,18 @@ function bindEvents() {
     $('btn-cancel-image').onclick = cancelImg;
     $('btn-close-viewer').onclick = () => $('image-viewer-modal').classList.add('hidden');
 
-    // Emoji
     $('btn-emoji').onclick = (e) => { e.stopPropagation(); toggleEmoji(); };
 
-    // Áudio
     $('btn-record').onclick = startRec;
     $('btn-stop-record').onclick = stopRec;
     $('btn-cancel-record').onclick = cancelRec;
 
-    // Player
     $('btn-close-audio').onclick = closePlayer;
     $('btn-play-pause').onclick = togglePlay;
     $('audio-progress').oninput = seekAudio;
 
-    // Limpar
     $('btn-clear').onclick = () => { if(confirm('Limpar conversa?')) clearMsgs(); };
 
-    // Fechar modais
     $('image-preview-modal').onclick = (e) => { if(e.target===$('image-preview-modal')) cancelImg(); };
     $('image-viewer-modal').onclick = (e) => { if(e.target===$('image-viewer-modal')) $('image-viewer-modal').classList.add('hidden'); };
     $('audio-player-modal').onclick = (e) => { if(e.target===$('audio-player-modal')) closePlayer(); };
@@ -189,7 +177,7 @@ function login() {
 
     me = { name:name, id:'u'+Date.now()+'_'+Math.random().toString(36).substr(2,6) };
     localStorage.setItem(LS_USER, JSON.stringify(me));
-    dlog('Login: ' + me.name + ' | ID: ' + me.id);
+    dlog('Login: ' + me.name);
 
     $('login-screen').classList.remove('active');
     setTimeout(() => {
@@ -201,7 +189,7 @@ function login() {
     connectRoom();
 }
 
-// ========== FIREBASE CONEXÃO ==========
+// ========== FIREBASE ==========
 function bindFirebase() {
     db.ref('.info/connected').on('value', (s) => {
         const on = s.val();
@@ -216,27 +204,22 @@ function bindFirebase() {
             me = JSON.parse(saved);
             $('login-screen').classList.remove('active');
             $('chat-screen').classList.add('active');
-            dlog('Auto-login: ' + me.name);
             connectRoom();
-        } catch(e) { dlog('Erro auto-login: ' + e.message, 'error'); }
+        } catch(e) {}
     }
 }
 
-// ========== SINCRONIZAÇÃO ==========
 function connectRoom() {
-    if(!me) { dlog('Sem usuário para conectar', 'error'); return; }
-    dlog('Conectando sala: ' + SYNC);
+    if(!me) return;
+    dlog('Conectando...');
 
-    // Listener principal
     db.ref(SYNC).limitToLast(50).on('value', (snap) => {
-        dlog('Dados recebidos do Firebase');
         const data = snap.val();
-        if(!data) { dlog('Nó vazio', 'warn'); return; }
+        if(!data) return;
 
         const keys = Object.keys(data);
-        dlog('Total mensagens no Firebase: ' + keys.length);
-
         let novas = 0;
+
         keys.forEach(k => {
             const d = data[k];
             if(!d || d.senderId===me.id) return;
@@ -246,34 +229,22 @@ function connectRoom() {
             seen.add(id);
 
             const msg = {
-                id: id,
-                type: d.type,
-                sender: d.sender,
-                senderId: d.senderId,
-                time: d.timestamp || Date.now(),
-                text: d.text || null,
-                img: d.imageUrl || null,
-                audio: d.audioUrl || null,
-                dur: d.duration || 0
+                id: id, type: d.type, sender: d.sender, senderId: d.senderId,
+                time: d.timestamp || Date.now(), text: d.text || null,
+                img: d.imageUrl || null, audio: d.audioUrl || null, dur: d.duration || 0
             };
 
             if(addMsg(msg)) {
                 renderMsg(msg);
                 novas++;
-                dlog('Nova msg de ' + msg.sender + ': ' + (msg.text || '['+msg.type+']'));
             }
         });
 
-        if(novas>0) {
-            scrollBottom();
-            dlog(novas + ' mensagens novas recebidas');
-        }
+        if(novas>0) scrollBottom();
     }, (err) => {
-        dlog('ERRO sync: ' + err.message, 'error');
-        toast('Erro de conexão');
+        dlog('ERRO: ' + err.message, 'error');
     });
 
-    // Typing
     db.ref(TYPING).on('value', (snap) => {
         const t = snap.val();
         if(!t) { $('typing-indicator').classList.add('hidden'); return; }
@@ -289,11 +260,9 @@ function connectRoom() {
     });
 
     window.onbeforeunload = () => { if(me) db.ref(TYPING+'/'+me.id).remove(); };
-    dlog('Listener ativo!');
 }
 
 function pub(msg) {
-    dlog('Publicando: ' + msg.type);
     const data = {
         id: msg.id, syncId: msg.id, type: msg.type,
         sender: msg.sender, senderId: msg.senderId,
@@ -301,15 +270,14 @@ function pub(msg) {
         imageUrl: msg.img, audioUrl: msg.audio, duration: msg.dur
     };
     return db.ref(SYNC).push(data)
-        .then(() => { dlog('Publicado OK: ' + msg.id); })
-        .catch(err => { dlog('ERRO publicar: ' + err.message, 'error'); toast('Erro ao enviar'); throw err; });
+        .then(() => { dlog('Enviado: ' + msg.id); })
+        .catch(err => { dlog('ERRO enviar: ' + err.message, 'error'); toast('Erro ao enviar'); throw err; });
 }
 
-// ========== ENVIAR TEXTO ==========
+// ========== TEXTO ==========
 function sendText() {
     const text = $('message-input').value.trim();
     if(!text || !me) return;
-    dlog('Enviando texto: ' + text.substring(0,30));
 
     const msg = mkMsg('text', {text:text});
     addMsg(msg);
@@ -319,26 +287,22 @@ function sendText() {
     $('message-input').value = '';
     toggleSendMic();
     stopTyping();
-
     pub(msg);
 }
 
 // ========== IMAGEM ==========
 function onImgSelect(e) {
     const f = e.target.files[0];
-    if(!f) { dlog('Nenhum arquivo selecionado', 'warn'); return; }
+    if(!f) return;
     if(f.size > 8*1024*1024) { toast('Máx 8MB'); return; }
 
     imgFile = f;
-    dlog('Imagem selecionada: ' + f.name + ' (' + f.size + ' bytes)');
-
     const r = new FileReader();
     r.onload = (ev) => {
         imgData = ev.target.result;
         $('preview-img').src = imgData;
         $('image-preview-modal').classList.remove('hidden');
     };
-    r.onerror = () => { dlog('Erro ao ler imagem', 'error'); };
     r.readAsDataURL(f);
 }
 
@@ -349,22 +313,17 @@ function cancelImg() {
 }
 
 async function sendImg() {
-    if(!imgFile || !me) { dlog('Sem arquivo ou usuário', 'error'); return; }
+    if(!imgFile || !me) return;
     $('btn-confirm-image').textContent = 'Enviando...';
     $('btn-confirm-image').disabled = true;
 
     try {
-        dlog('Comprimindo imagem...');
         const blob = await compressImg(imgFile);
-        dlog('Imagem comprimida: ' + blob.size + ' bytes');
-
         const name = 'img/'+Date.now()+'_'+Math.random().toString(36).substr(2,8)+'.jpg';
-        dlog('Upload para: ' + name);
         const ref = st.ref(name);
 
         await ref.put(blob);
         const url = await ref.getDownloadURL();
-        dlog('IMG URL: ' + url.substring(0,50) + '...');
 
         const msg = mkMsg('image', {img:url});
         addMsg(msg);
@@ -376,8 +335,7 @@ async function sendImg() {
         toast('Imagem enviada!');
 
     } catch(e) {
-        dlog('ERRO imagem: ' + e.message, 'error');
-        dlog('Stack: ' + (e.stack || 'sem stack'), 'error');
+        dlog('ERRO img: ' + e.message, 'error');
         toast('Erro: ' + e.message);
     } finally {
         $('btn-confirm-image').textContent = 'Enviar';
@@ -390,11 +348,10 @@ function compressImg(file) {
         const img = new Image();
         const r = new FileReader();
         r.onload = (e) => { img.src = e.target.result; };
-        r.onerror = (e) => { dlog('FileReader erro', 'error'); reject(e); };
+        r.onerror = reject;
         r.readAsDataURL(file);
 
         img.onload = () => {
-            dlog('Imagem carregada: ' + img.width + 'x' + img.height);
             const c = document.createElement('canvas');
             const MAX = 1200;
             let w = img.width, h = img.height;
@@ -404,66 +361,130 @@ function compressImg(file) {
             const ctx = c.getContext('2d');
             ctx.fillStyle='#FFF'; ctx.fillRect(0,0,w,h);
             ctx.drawImage(img,0,0,w,h);
-            c.toBlob((b) => {
-                if(b) { dlog('Blob criado: ' + b.size + ' bytes'); resolve(b); }
-                else { dlog('Falha ao criar blob', 'error'); reject('Falha'); }
-            }, 'image/jpeg', 0.75);
+            c.toBlob((b) => { if(b) resolve(b); else reject('Falha'); }, 'image/jpeg', 0.75);
         };
-        img.onerror = () => { dlog('Erro ao carregar imagem', 'error'); reject('Erro img'); };
+        img.onerror = reject;
     });
 }
 
-// ========== ÁUDIO ==========
+// ========== ÁUDIO CORRIGIDO ==========
 async function startRec() {
-    dlog('Iniciando gravação...');
-    if(!navigator.mediaDevices || !window.MediaRecorder) {
-        dlog('MediaRecorder não suportado', 'error');
-        toast('Navegador não suporta áudio'); return;
+    dlog('=== INICIANDO GRAVAÇÃO ===');
+
+    if(!navigator.mediaDevices) {
+        dlog('mediaDevices NÃO existe!', 'error');
+        toast('Navegador não suporta áudio');
+        return;
+    }
+
+    if(!window.MediaRecorder) {
+        dlog('MediaRecorder NÃO existe!', 'error');
+        toast('MediaRecorder não suportado');
+        return;
+    }
+
+    // Verificar quais mimeTypes são suportados
+    const mimeTypes = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4',
+        'audio/ogg;codecs=opus',
+        'audio/ogg',
+        ''  // vazio = padrão do navegador
+    ];
+
+    let supportedMime = '';
+    for(const mime of mimeTypes) {
+        if(MediaRecorder.isTypeSupported(mime)) {
+            supportedMime = mime;
+            dlog('MIME suportado: ' + mime);
+            break;
+        }
+    }
+
+    if(!supportedMime) {
+        dlog('Nenhum MIME suportado!', 'error');
+        toast('Seu navegador não suporta gravação');
+        return;
     }
 
     try {
         dlog('Solicitando microfone...');
         const stream = await navigator.mediaDevices.getUserMedia({
-            audio: { echoCancellation:true, noiseSuppression:true, sampleRate:22050 }
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+                sampleRate: 44100,
+                channelCount: 1
+            }
         });
-        dlog('Microfone OK');
+        dlog('Microfone OK!');
 
-        const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-            ? 'audio/webm;codecs=opus' : 'audio/webm';
-        dlog('MIME: ' + mime);
+        // Configuração do recorder
+        const options = {};
+        if(supportedMime) options.mimeType = supportedMime;
 
-        recorder = new MediaRecorder(stream, {mimeType:mime});
+        dlog('Criando MediaRecorder com: ' + JSON.stringify(options));
+        recorder = new MediaRecorder(stream, options);
         audioChunks = [];
 
         recorder.ondataavailable = (e) => {
-            dlog('Chunk: ' + e.data.size + ' bytes');
-            if(e.data.size>0) audioChunks.push(e.data);
+            dlog('Chunk recebido: ' + e.data.size + ' bytes');
+            if(e.data.size > 0) {
+                audioChunks.push(e.data);
+                dlog('Total chunks: ' + audioChunks.length);
+            }
+        };
+
+        recorder.onstart = () => {
+            dlog('Gravação STARTED');
         };
 
         recorder.onstop = async () => {
-            dlog('Gravação parada. Chunks: ' + audioChunks.length);
-            const blob = new Blob(audioChunks, {type:'audio/webm'});
-            dlog('Blob total: ' + blob.size + ' bytes');
-            if(blob.size>0) await uploadAudio(blob);
-            else { dlog('Blob vazio!', 'error'); toast('Áudio vazio'); }
-            stream.getTracks().forEach(t=>t.stop());
+            dlog('Gravação STOPPED');
+            dlog('Chunks finais: ' + audioChunks.length);
+
+            if(audioChunks.length === 0) {
+                dlog('NENHUM CHUNK! Áudio vazio.', 'error');
+                toast('Áudio vazio - tente novamente');
+                stream.getTracks().forEach(t => t.stop());
+                return;
+            }
+
+            const blob = new Blob(audioChunks, {type: supportedMime || 'audio/webm'});
+            dlog('Blob criado: ' + blob.size + ' bytes');
+
+            if(blob.size < 100) {
+                dlog('Blob muito pequeno: ' + blob.size + ' bytes', 'error');
+                toast('Áudio muito curto');
+                stream.getTracks().forEach(t => t.stop());
+                return;
+            }
+
+            await uploadAudio(blob, supportedMime);
+            stream.getTracks().forEach(t => t.stop());
         };
 
         recorder.onerror = (e) => {
-            dlog('Recorder erro: ' + e.message, 'error');
+            dlog('Recorder ERROR: ' + e.message, 'error');
             toast('Erro na gravação');
             cancelRecUI();
         };
 
-        recorder.start(100);
+        // INICIAR com timeslice de 1000ms (1 segundo)
+        // Isso força o navegador a gerar chunks mesmo em mobile
+        recorder.start(1000);
         isRec = true;
         recStart = Date.now();
         showRecUI();
-        dlog('Gravando...');
+        dlog('Gravando... (timeslice: 1000ms)');
 
     } catch(err) {
-        dlog('ERRO mic: ' + err.name + ' - ' + err.message, 'error');
-        toast('Permita acesso ao microfone');
+        dlog('ERRO: ' + err.name + ' - ' + err.message, 'error');
+        if(err.name === 'NotAllowedError') toast('Permita acesso ao microfone');
+        else if(err.name === 'NotFoundError') toast('Microfone não encontrado');
+        else toast('Erro: ' + err.message);
     }
 }
 
@@ -487,9 +508,9 @@ function cancelRecUI() {
 }
 
 function stopRec() {
-    if(!isRec || !recorder) { dlog('Nada para parar', 'warn'); return; }
-    dlog('Parando gravação... Estado: ' + recorder.state);
-    if(recorder.state!=='inactive') recorder.stop();
+    if(!isRec || !recorder) return;
+    dlog('Parando... Estado: ' + recorder.state);
+    if(recorder.state !== 'inactive') recorder.stop();
     isRec = false;
     clearInterval(recTimer);
     cancelRecUI();
@@ -497,32 +518,44 @@ function stopRec() {
 
 function cancelRec() {
     if(!isRec || !recorder) return;
-    dlog('Cancelando gravação');
-    if(recorder.state!=='inactive') recorder.stop();
+    dlog('Cancelando...');
+    if(recorder.state !== 'inactive') recorder.stop();
     isRec = false;
     clearInterval(recTimer);
     audioChunks = [];
     cancelRecUI();
 }
 
-async function uploadAudio(blob) {
-    dlog('Upload audio. Size: ' + blob.size);
-    if(blob.size===0) { dlog('Blob vazio!', 'error'); toast('Áudio vazio'); return; }
+async function uploadAudio(blob, mimeType) {
+    dlog('=== UPLOAD ÁUDIO ===');
+    dlog('Tamanho: ' + blob.size + ' bytes');
+    dlog('Tipo: ' + mimeType);
 
     const dur = Math.floor((Date.now()-recStart)/1000);
     toast('Enviando áudio...');
 
     try {
-        const name = 'audio/'+Date.now()+'_'+Math.random().toString(36).substr(2,8)+'.webm';
-        dlog('Upload para: ' + name);
+        // Determinar extensão correta
+        let ext = 'webm';
+        if(mimeType.includes('mp4')) ext = 'mp4';
+        else if(mimeType.includes('ogg')) ext = 'ogg';
+
+        const name = 'audio/'+Date.now()+'_'+Math.random().toString(36).substr(2,8)+'.'+ext;
+        dlog('Nome: ' + name);
+
         const ref = st.ref(name);
 
-        dlog('Iniciando put...');
-        await ref.put(blob);
-        dlog('Put OK');
+        // Metadata para o arquivo
+        const metadata = {
+            contentType: mimeType || 'audio/webm'
+        };
+
+        dlog('Enviando para Storage...');
+        await ref.put(blob, metadata);
+        dlog('Upload OK!');
 
         const url = await ref.getDownloadURL();
-        dlog('Audio URL: ' + url.substring(0,50) + '...');
+        dlog('URL: ' + url.substring(0,40) + '...');
 
         const msg = mkMsg('audio', {audio:url, dur:dur});
         addMsg(msg);
@@ -530,10 +563,10 @@ async function uploadAudio(blob) {
         scrollBottom();
 
         await pub(msg);
-        toast('Áudio enviado!');
+        toast('Áudio enviado! (' + dur + 's)');
 
     } catch(e) {
-        dlog('ERRO audio upload: ' + e.message, 'error');
+        dlog('ERRO upload: ' + e.message, 'error');
         dlog('Code: ' + (e.code || 'sem code'), 'error');
         toast('Erro ao enviar áudio');
     }
@@ -604,9 +637,9 @@ function renderMsg(msg, anim) {
     $('messages-list').appendChild(div);
 }
 
-// ========== PLAYER ÁUDIO ==========
+// ========== PLAYER ==========
 window.playAudio = function(url, dur) {
-    dlog('Reproduzindo: ' + url.substring(0,40) + '...');
+    dlog('Play: ' + url.substring(0,40));
     if(player) { player.pause(); player.currentTime=0; }
 
     player = new Audio(url);
@@ -621,7 +654,7 @@ window.playAudio = function(url, dur) {
         $('btn-play-pause').textContent = '▶️';
         clearInterval(playerTimer);
     };
-    player.onerror = () => { dlog('Erro carregar áudio', 'error'); toast('Erro áudio'); closePlayer(); };
+    player.onerror = () => { dlog('Erro carregar', 'error'); toast('Erro áudio'); closePlayer(); };
 
     clearInterval(playerTimer);
     playerTimer = setInterval(() => {
@@ -644,7 +677,7 @@ function closePlayer() {
     $('audio-player-modal').classList.add('hidden');
 }
 
-// ========== VIEWER IMAGEM ==========
+// ========== VIEWER ==========
 window.viewImg = function(url) {
     $('viewer-img').src = url;
     $('image-viewer-modal').classList.remove('hidden');

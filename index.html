@@ -11,6 +11,16 @@
 <base target="_blank">
 </head>
 <body>
+    <!-- DIAGNÓSTICO VISUAL (para celular, sem F12) -->
+    <div id="debug-panel" style="position:fixed; top:0; left:0; width:100%; background:#1a1a2e; color:#00ff88; padding:8px; font-size:11px; font-family:monospace; z-index:9999; max-height:120px; overflow-y:auto; display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+            <b>🔧 DIAGNÓSTICO</b>
+            <button onclick="toggleDebug()" style="background:#ff4444; color:white; border:none; padding:2px 8px; border-radius:4px; font-size:10px;">FECHAR</button>
+        </div>
+        <div id="debug-logs"></div>
+    </div>
+    <button id="btn-debug" onclick="toggleDebug()" style="position:fixed; top:5px; right:5px; z-index:9998; background:#128C7E; color:white; border:none; padding:6px 10px; border-radius:4px; font-size:10px; opacity:0.7;">🔧 DEBUG</button>
+
     <!-- LOGIN -->
     <div id="login-screen" class="screen active">
         <div class="login-container">

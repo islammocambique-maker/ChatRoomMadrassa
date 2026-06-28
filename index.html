@@ -5,14 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Madrassa Online — Sala de Aulas</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
 <base target="_blank">
 </head>
 <body>
-    <!-- Tela de Login -->
+    <!-- LOGIN -->
     <div id="login-screen" class="screen active">
         <div class="login-container">
             <div class="logo-section">
@@ -27,18 +26,15 @@
                 </div>
                 <button id="btn-enter" class="btn-primary">
                     <span>Entrar na Sala</span>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M5 12h14M12 5l7 7-7 7"/>
-                    </svg>
+                    <span style="font-size:20px">➤</span>
                 </button>
             </div>
             <p class="privacy-note">💡 Seu nome será visível para todos os participantes</p>
         </div>
     </div>
 
-    <!-- Tela do Chat -->
+    <!-- CHAT -->
     <div id="chat-screen" class="screen">
-        <!-- Header -->
         <header class="chat-header">
             <div class="header-left">
                 <div class="avatar">🕌</div>
@@ -48,12 +44,10 @@
                 </div>
             </div>
             <div class="header-right">
-                <button id="btn-clear" class="icon-btn" title="Limpar conversa">🗑️</button>
-                <button id="btn-menu" class="icon-btn" title="Menu">⋮</button>
+                <button id="btn-clear" class="icon-btn" title="Limpar">🗑️</button>
             </div>
         </header>
 
-        <!-- Área de Mensagens -->
         <main id="messages-area" class="messages-area">
             <div class="welcome-message">
                 <div class="welcome-bubble">
@@ -69,7 +63,6 @@
             </div>
         </main>
 
-        <!-- Input Area -->
         <footer class="input-area">
             <div class="input-wrapper" id="normal-input">
                 <button id="btn-attach" class="icon-btn attach-btn" title="Anexar">📎</button>
@@ -81,7 +74,6 @@
                 <button id="btn-send" class="icon-btn send-btn hidden" title="Enviar">➤</button>
             </div>
 
-            <!-- Gravador de Áudio -->
             <div id="audio-recorder" class="audio-recorder hidden">
                 <div class="recorder-wave">
                     <span></span><span></span><span></span><span></span><span></span>
@@ -92,7 +84,7 @@
             </div>
         </footer>
 
-        <!-- Menu de Anexos -->
+        <!-- Menu Anexos -->
         <div id="attach-menu" class="attach-menu hidden">
             <button id="btn-image" class="attach-option">
                 <span class="attach-icon">📷</span>
@@ -110,7 +102,7 @@
             <div class="emoji-grid" id="emoji-grid"></div>
         </div>
 
-        <!-- Preview de Imagem -->
+        <!-- Preview Imagem -->
         <div id="image-preview-modal" class="modal hidden">
             <div class="modal-content">
                 <img id="preview-img" src="" alt="Preview">
@@ -121,7 +113,7 @@
             </div>
         </div>
 
-        <!-- Visualizador de Imagem em Tela Cheia -->
+        <!-- Visualizador Imagem -->
         <div id="image-viewer-modal" class="modal hidden">
             <div class="modal-content viewer-content">
                 <button id="btn-close-viewer" class="viewer-close">✕</button>
@@ -129,7 +121,7 @@
             </div>
         </div>
 
-        <!-- Reprodutor de Áudio -->
+        <!-- Reprodutor Áudio -->
         <div id="audio-player-modal" class="modal hidden">
             <div class="modal-content audio-player-content">
                 <div class="audio-player-header">
@@ -149,7 +141,6 @@
         </div>
     </div>
 
-    <!-- Toast Notifications -->
     <div id="toast" class="toast hidden"></div>
 
     <script src="app.js"></script>

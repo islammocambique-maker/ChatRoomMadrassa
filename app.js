@@ -1,14 +1,14 @@
 /**
- * MADRASSA ONLINE v6 — ÁUDIO CORRIGIDO PARA CELULAR
- * Problema: MediaRecorder no mobile precisa de timeslice e mimeType correto
- * Solução: Usar timeslice maior, verificar suporte de mimeType, fallback para wav
+ * MADRASSA ONLINE v7 — ÁUDIO COM FALLBACK PARA CELULAR
+ * Se MediaRecorder falhar, usa Web Audio API + gravação manual
  */
 
 // ========== DIAGNÓSTICO VISUAL ==========
 let debugVisible = false;
 function toggleDebug() {
     debugVisible = !debugVisible;
-    document.getElementById('debug-panel').style.display = debugVisible ? 'block' : 'none';
+    const panel = document.getElementById('debug-panel');
+    if(panel) panel.style.display = debugVisible ? 'block' : 'none';
 }
 function dlog(msg, type='info') {
     const div = document.getElementById('debug-logs');
@@ -66,6 +66,13 @@ let seen = new Set();
 let imgFile = null;
 let imgData = null;
 
+// Variáveis para fallback de áudio
+let audioContext = null;
+let mediaStream = null;
+let scriptNode = null;
+let audioBuffer = [];
+let useFallbackAudio = false;
+
 // ========== ELEMENTOS ==========
 function $(id) { return document.getElementById(id); }
 
@@ -94,7 +101,7 @@ function clearMsgs() {
 
 // ========== INICIALIZAÇÃO ==========
 document.addEventListener('DOMContentLoaded', () => {
-    dlog('App iniciado');
+    dlog('App v7 iniciado');
     $('welcome-time').textContent = fmtTime(new Date());
 
     // Emojis
@@ -195,7 +202,6 @@ function bindFirebase() {
         const on = s.val();
         $('online-status').textContent = on ? 'Online' : 'Offline';
         $('online-status').style.color = on ? '#25D366' : '#ff4444';
-        dlog('Firebase: ' + (on?'Online':'Offline'));
     });
 
     const saved = localStorage.getItem(LS_USER);
@@ -367,44 +373,13 @@ function compressImg(file) {
     });
 }
 
-// ========== ÁUDIO CORRIGIDO ==========
+// ========== ÁUDIO COM FALLBACK ==========
 async function startRec() {
-    dlog('=== INICIANDO GRAVAÇÃO ===');
+    dlog('=== INICIANDO GRAVAÇÃO v7 ===');
 
     if(!navigator.mediaDevices) {
-        dlog('mediaDevices NÃO existe!', 'error');
+        dlog('mediaDevices não existe!', 'error');
         toast('Navegador não suporta áudio');
-        return;
-    }
-
-    if(!window.MediaRecorder) {
-        dlog('MediaRecorder NÃO existe!', 'error');
-        toast('MediaRecorder não suportado');
-        return;
-    }
-
-    // Verificar quais mimeTypes são suportados
-    const mimeTypes = [
-        'audio/webm;codecs=opus',
-        'audio/webm',
-        'audio/mp4',
-        'audio/ogg;codecs=opus',
-        'audio/ogg',
-        ''  // vazio = padrão do navegador
-    ];
-
-    let supportedMime = '';
-    for(const mime of mimeTypes) {
-        if(MediaRecorder.isTypeSupported(mime)) {
-            supportedMime = mime;
-            dlog('MIME suportado: ' + mime);
-            break;
-        }
-    }
-
-    if(!supportedMime) {
-        dlog('Nenhum MIME suportado!', 'error');
-        toast('Seu navegador não suporta gravação');
         return;
     }
 
@@ -421,64 +396,32 @@ async function startRec() {
         });
         dlog('Microfone OK!');
 
-        // Configuração do recorder
-        const options = {};
-        if(supportedMime) options.mimeType = supportedMime;
+        // Tentar MediaRecorder primeiro
+        const mimeTypes = [
+            'audio/webm;codecs=opus',
+            'audio/webm',
+            'audio/mp4',
+            'audio/ogg;codecs=opus',
+            'audio/ogg',
+            ''
+        ];
 
-        dlog('Criando MediaRecorder com: ' + JSON.stringify(options));
-        recorder = new MediaRecorder(stream, options);
-        audioChunks = [];
-
-        recorder.ondataavailable = (e) => {
-            dlog('Chunk recebido: ' + e.data.size + ' bytes');
-            if(e.data.size > 0) {
-                audioChunks.push(e.data);
-                dlog('Total chunks: ' + audioChunks.length);
+        let supportedMime = '';
+        for(const mime of mimeTypes) {
+            if(MediaRecorder.isTypeSupported(mime)) {
+                supportedMime = mime;
+                dlog('MIME suportado: ' + mime);
+                break;
             }
-        };
+        }
 
-        recorder.onstart = () => {
-            dlog('Gravação STARTED');
-        };
-
-        recorder.onstop = async () => {
-            dlog('Gravação STOPPED');
-            dlog('Chunks finais: ' + audioChunks.length);
-
-            if(audioChunks.length === 0) {
-                dlog('NENHUM CHUNK! Áudio vazio.', 'error');
-                toast('Áudio vazio - tente novamente');
-                stream.getTracks().forEach(t => t.stop());
-                return;
-            }
-
-            const blob = new Blob(audioChunks, {type: supportedMime || 'audio/webm'});
-            dlog('Blob criado: ' + blob.size + ' bytes');
-
-            if(blob.size < 100) {
-                dlog('Blob muito pequeno: ' + blob.size + ' bytes', 'error');
-                toast('Áudio muito curto');
-                stream.getTracks().forEach(t => t.stop());
-                return;
-            }
-
-            await uploadAudio(blob, supportedMime);
-            stream.getTracks().forEach(t => t.stop());
-        };
-
-        recorder.onerror = (e) => {
-            dlog('Recorder ERROR: ' + e.message, 'error');
-            toast('Erro na gravação');
-            cancelRecUI();
-        };
-
-        // INICIAR com timeslice de 1000ms (1 segundo)
-        // Isso força o navegador a gerar chunks mesmo em mobile
-        recorder.start(1000);
-        isRec = true;
-        recStart = Date.now();
-        showRecUI();
-        dlog('Gravando... (timeslice: 1000ms)');
+        if(supportedMime && !useFallbackAudio) {
+            dlog('Usando MediaRecorder');
+            await startMediaRecorder(stream, supportedMime);
+        } else {
+            dlog('Usando fallback Web Audio');
+            await startWebAudio(stream);
+        }
 
     } catch(err) {
         dlog('ERRO: ' + err.name + ' - ' + err.message, 'error');
@@ -486,6 +429,81 @@ async function startRec() {
         else if(err.name === 'NotFoundError') toast('Microfone não encontrado');
         else toast('Erro: ' + err.message);
     }
+}
+
+// Método 1: MediaRecorder (funciona em desktop e alguns mobile)
+async function startMediaRecorder(stream, mimeType) {
+    const options = {};
+    if(mimeType) options.mimeType = mimeType;
+
+    recorder = new MediaRecorder(stream, options);
+    audioChunks = [];
+
+    recorder.ondataavailable = (e) => {
+        dlog('Chunk: ' + e.data.size + ' bytes');
+        if(e.data.size > 0) audioChunks.push(e.data);
+    };
+
+    recorder.onstop = async () => {
+        dlog('MediaRecorder parado. Chunks: ' + audioChunks.length);
+
+        if(audioChunks.length === 0 || audioChunks.every(c => c.size === 0)) {
+            dlog('MediaRecorder vazio! Tentando fallback...', 'warn');
+            useFallbackAudio = true;
+            toast('Tentando método alternativo...');
+            return;
+        }
+
+        const blob = new Blob(audioChunks, {type: mimeType || 'audio/webm'});
+        dlog('Blob: ' + blob.size + ' bytes');
+
+        if(blob.size < 100) {
+            dlog('Blob muito pequeno!', 'error');
+            toast('Áudio muito curto');
+            return;
+        }
+
+        await uploadAudio(blob, mimeType);
+        stream.getTracks().forEach(t => t.stop());
+    };
+
+    recorder.onerror = (e) => {
+        dlog('MediaRecorder erro: ' + e.message, 'error');
+        useFallbackAudio = true;
+    };
+
+    recorder.start(1000);
+    isRec = true;
+    recStart = Date.now();
+    showRecUI();
+    dlog('MediaRecorder iniciado');
+}
+
+// Método 2: Web Audio API + ScriptProcessor (fallback para mobile)
+async function startWebAudio(stream) {
+    dlog('Iniciando Web Audio fallback...');
+
+    audioContext = new (window.AudioContext || window.webkitAudioContext)({
+        sampleRate: 44100
+    });
+
+    mediaStream = audioContext.createMediaStreamSource(stream);
+    scriptNode = audioContext.createScriptProcessor(4096, 1, 1);
+    audioBuffer = [];
+
+    scriptNode.onaudioprocess = (e) => {
+        const inputData = e.inputBuffer.getChannelData(0);
+        // Copiar dados (Float32Array)
+        audioBuffer.push(new Float32Array(inputData));
+    };
+
+    mediaStream.connect(scriptNode);
+    scriptNode.connect(audioContext.destination);
+
+    isRec = true;
+    recStart = Date.now();
+    showRecUI();
+    dlog('Web Audio gravando...');
 }
 
 function showRecUI() {
@@ -507,27 +525,121 @@ function cancelRecUI() {
     $('recorder-timer').textContent = '00:00';
 }
 
-function stopRec() {
-    if(!isRec || !recorder) return;
-    dlog('Parando... Estado: ' + recorder.state);
-    if(recorder.state !== 'inactive') recorder.stop();
+async function stopRec() {
+    if(!isRec) return;
+    dlog('Parando gravação...');
+
+    if(recorder && recorder.state !== 'inactive') {
+        // MediaRecorder ativo
+        recorder.stop();
+    } else if(scriptNode) {
+        // Web Audio ativo
+        scriptNode.disconnect();
+        mediaStream.disconnect();
+
+        if(audioContext) {
+            await audioContext.close();
+        }
+
+        // Converter buffer para WAV
+        dlog('Convertendo buffer (' + audioBuffer.length + ' chunks)...');
+        const wavBlob = bufferToWav(audioBuffer, audioContext.sampleRate);
+        dlog('WAV criado: ' + wavBlob.size + ' bytes');
+
+        if(wavBlob.size > 100) {
+            await uploadAudio(wavBlob, 'audio/wav');
+        } else {
+            dlog('WAV vazio!', 'error');
+            toast('Áudio vazio');
+        }
+
+        // Parar stream
+        if(mediaStream && mediaStream.mediaStream) {
+            mediaStream.mediaStream.getTracks().forEach(t => t.stop());
+        }
+    }
+
     isRec = false;
     clearInterval(recTimer);
     cancelRecUI();
 }
 
 function cancelRec() {
-    if(!isRec || !recorder) return;
+    if(!isRec) return;
     dlog('Cancelando...');
-    if(recorder.state !== 'inactive') recorder.stop();
+
+    if(recorder && recorder.state !== 'inactive') {
+        recorder.stop();
+    }
+
+    if(scriptNode) {
+        scriptNode.disconnect();
+        if(mediaStream) mediaStream.disconnect();
+        if(audioContext) audioContext.close();
+    }
+
     isRec = false;
     clearInterval(recTimer);
     audioChunks = [];
+    audioBuffer = [];
     cancelRecUI();
 }
 
+// Converter Float32Array buffer para WAV Blob
+function bufferToWav(buffers, sampleRate) {
+    // Juntar todos os buffers
+    let totalLength = 0;
+    buffers.forEach(b => totalLength += b.length);
+
+    const merged = new Float32Array(totalLength);
+    let offset = 0;
+    buffers.forEach(b => {
+        merged.set(b, offset);
+        offset += b.length;
+    });
+
+    // Converter para 16-bit PCM
+    const bytesPerSample = 2;
+    const dataLength = merged.length * bytesPerSample;
+
+    const buffer = new ArrayBuffer(44 + dataLength);
+    const view = new DataView(buffer);
+
+    // WAV Header
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + dataLength, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true); // PCM
+    view.setUint16(22, 1, true); // Mono
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * bytesPerSample, true);
+    view.setUint16(32, bytesPerSample, true);
+    view.setUint16(34, 16, true); // 16-bit
+    writeString(view, 36, 'data');
+    view.setUint32(40, dataLength, true);
+
+    // PCM Data
+    offset = 44;
+    for(let i = 0; i < merged.length; i++) {
+        let s = Math.max(-1, Math.min(1, merged[i]));
+        s = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        view.setInt16(offset, s, true);
+        offset += 2;
+    }
+
+    return new Blob([buffer], {type: 'audio/wav'});
+}
+
+function writeString(view, offset, string) {
+    for(let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+    }
+}
+
 async function uploadAudio(blob, mimeType) {
-    dlog('=== UPLOAD ÁUDIO ===');
+    dlog('=== UPLOAD ===');
     dlog('Tamanho: ' + blob.size + ' bytes');
     dlog('Tipo: ' + mimeType);
 
@@ -535,22 +647,17 @@ async function uploadAudio(blob, mimeType) {
     toast('Enviando áudio...');
 
     try {
-        // Determinar extensão correta
         let ext = 'webm';
         if(mimeType.includes('mp4')) ext = 'mp4';
         else if(mimeType.includes('ogg')) ext = 'ogg';
+        else if(mimeType.includes('wav')) ext = 'wav';
 
         const name = 'audio/'+Date.now()+'_'+Math.random().toString(36).substr(2,8)+'.'+ext;
         dlog('Nome: ' + name);
 
         const ref = st.ref(name);
+        const metadata = { contentType: mimeType || 'audio/webm' };
 
-        // Metadata para o arquivo
-        const metadata = {
-            contentType: mimeType || 'audio/webm'
-        };
-
-        dlog('Enviando para Storage...');
         await ref.put(blob, metadata);
         dlog('Upload OK!');
 
@@ -567,7 +674,6 @@ async function uploadAudio(blob, mimeType) {
 
     } catch(e) {
         dlog('ERRO upload: ' + e.message, 'error');
-        dlog('Code: ' + (e.code || 'sem code'), 'error');
         toast('Erro ao enviar áudio');
     }
 }

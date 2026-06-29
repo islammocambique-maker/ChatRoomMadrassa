@@ -8,18 +8,17 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
-<base target="_blank">
 </head>
 <body>
-    <!-- DIAGNÓSTICO VISUAL (para celular, sem F12) -->
+    <!-- DIAGNOSTICO VISUAL -->
     <div id="debug-panel" style="position:fixed; top:0; left:0; width:100%; background:#1a1a2e; color:#00ff88; padding:8px; font-size:11px; font-family:monospace; z-index:9999; max-height:120px; overflow-y:auto; display:none;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-            <b>🔧 DIAGNÓSTICO</b>
+            <b>DIAGNOSTICO</b>
             <button onclick="toggleDebug()" style="background:#ff4444; color:white; border:none; padding:2px 8px; border-radius:4px; font-size:10px;">FECHAR</button>
         </div>
         <div id="debug-logs"></div>
     </div>
-    <button id="btn-debug" onclick="toggleDebug()" style="position:fixed; top:5px; right:5px; z-index:9998; background:#128C7E; color:white; border:none; padding:6px 10px; border-radius:4px; font-size:10px; opacity:0.7;">🔧 DEBUG</button>
+    <button id="btn-debug" onclick="toggleDebug()" style="position:fixed; top:5px; right:5px; z-index:9998; background:#128C7E; color:white; border:none; padding:6px 10px; border-radius:4px; font-size:10px; opacity:0.7;">DEBUG</button>
 
     <!-- LOGIN -->
     <div id="login-screen" class="screen active">
@@ -27,7 +26,7 @@
             <div class="logo-section">
                 <div class="logo-icon">🕌</div>
                 <h1>Madrassa Online</h1>
-                <p class="subtitle">Islam Moçambique — Sala de Aulas</p>
+                <p class="subtitle">Islam Mocambique — Sala de Aulas</p>
             </div>
             <div class="login-form">
                 <div class="input-group">
@@ -39,7 +38,7 @@
                     <span style="font-size:20px">➤</span>
                 </button>
             </div>
-            <p class="privacy-note">💡 Seu nome será visível para todos os participantes</p>
+            <p class="privacy-note">Seu nome sera visivel para todos os participantes</p>
         </div>
     </div>
 
@@ -61,14 +60,14 @@
         <main id="messages-area" class="messages-area">
             <div class="welcome-message">
                 <div class="welcome-bubble">
-                    <p>🌙 Bem-vindo à Sala de Aulas da Madrassa Online!</p>
-                    <p>Respeite os irmãos e mantenha o diálogo educado.</p>
+                    <p>🌙 Bem-vindo a Sala de Aulas da Madrassa Online!</p>
+                    <p>Respeite os irmaos e mantenha o dialogo educado.</p>
                     <span class="welcome-time" id="welcome-time"></span>
                 </div>
             </div>
             <div id="messages-list"></div>
             <div id="typing-indicator" class="typing-indicator hidden">
-                <span id="typing-text">Alguém está digitando</span>
+                <span id="typing-text">Alguem esta digitando</span>
                 <div class="typing-dots"><span></span><span></span><span></span></div>
             </div>
         </main>
@@ -80,7 +79,7 @@
                     <input type="text" id="message-input" placeholder="Mensagem..." autocomplete="off" maxlength="1000">
                     <button id="btn-emoji" class="icon-btn emoji-btn" title="Emoji">😊</button>
                 </div>
-                <button id="btn-record" class="icon-btn record-btn" title="Gravar áudio">🎤</button>
+                <button id="btn-record" class="icon-btn record-btn" title="Gravar audio">🎤</button>
                 <button id="btn-send" class="icon-btn send-btn hidden" title="Enviar">➤</button>
             </div>
 
@@ -131,11 +130,11 @@
             </div>
         </div>
 
-        <!-- Reprodutor Áudio -->
+        <!-- Reprodutor Audio -->
         <div id="audio-player-modal" class="modal hidden">
             <div class="modal-content audio-player-content">
                 <div class="audio-player-header">
-                    <span>🎵 Mensagem de Áudio</span>
+                    <span>Mensagem de Audio</span>
                     <button id="btn-close-audio" class="icon-btn">✕</button>
                 </div>
                 <div class="audio-wave-big">
@@ -153,6 +152,657 @@
 
     <div id="toast" class="toast hidden"></div>
 
-    <script src="app.js"></script>
+    <script>
+    // ========== DIAGNOSTICO ==========
+    let debugVisible = false;
+    function toggleDebug() {
+        debugVisible = !debugVisible;
+        const panel = document.getElementById('debug-panel');
+        if(panel) panel.style.display = debugVisible ? 'block' : 'none';
+    }
+    function dlog(msg, type='info') {
+        console.log('[' + type + '] ' + msg);
+        const div = document.getElementById('debug-logs');
+        if(!div) return;
+        const line = document.createElement('div');
+        const time = new Date().toLocaleTimeString('pt-MZ');
+        line.style.cssText = 'border-bottom:1px solid #333; padding:2px 0; color:' + (type==='error'?'#ff4444':type==='warn'?'#ffaa00':'#00ff88');
+        line.textContent = '[' + time + '] ' + msg;
+        div.appendChild(line);
+        div.scrollTop = div.scrollHeight;
+    }
+
+    // ========== FIREBASE ==========
+    const firebaseConfig = {
+        apiKey: "AIzaSyD2rNS7HSJyek3OCrRquudFgqQSWXZJYrY",
+        authDomain: "madrassa-online-b851c.firebaseapp.com",
+        databaseURL: "https://madrassa-online-b851c-default-rtdb.firebaseio.com",
+        projectId: "madrassa-online-b851c",
+        storageBucket: "madrassa-online-b851c.appspot.com",
+        messagingSenderId: "360782668012",
+        appId: "1:360782668012:web:d501ef187911db632445c9",
+        measurementId: "G-RV9GD4S22T"
+    };
+
+    try {
+        firebase.initializeApp(firebaseConfig);
+        dlog('Firebase inicializado OK');
+    } catch (e) {
+        dlog('Firebase erro: ' + e.message, 'error');
+    }
+
+    const db = firebase.database();
+    const st = firebase.storage();
+
+    // ========== CONSTANTES ==========
+    const SYNC = 'rooms/sala_de_aulas_principal/sync';
+    const TYPING = 'rooms/sala_de_aulas_principal/typing';
+    const LS_USER = 'madrassa_user';
+    const LS_MSGS = 'madrassa_messages';
+
+    const EMOJIS = '😀😃😄😁😆😅😂🤣😊😇🙂🙃😉😌😍🥰😘😗😙😚😋😛😝😜🤪🤨🧐🤓😎🥸🤩🥳😏😒😞😔😟😕🙁☹️😣😖😫😩🥺😢😭😤😠😡🤬🤯😳🥵🥶😱😨😰😥😓🤗🤔🤭🤫🤥😶😐😑😬🙄😯😦😧😮😲🥱😴🤤😪😵🤐🥴🤢🤮🤧😷🤒🤕🤑🤠😈👿👹👺🤡💩👻💀☠️👽👾🤖🎃😺😸😹😻😼😽🙀😿😾🕌🕋🤲🙏☪️✨🌙⭐🌟💫🔥❤️🧡💛💚💙💜🖤🤍🤎💔❣️💕💞💓💗💖💘💝👍👎👌✌️🤞🤟🤘🤙👈👉👆👇☝️👋🤚🖐️✋🖖👏🙌👐🤲🤝🙏✍️💪🦾🦿🦵🦶👂🦻👃🧠🫀🫁🦷🦴👀👁️👅👄👶🧒👦👧🧑👱👨🧔👩🧓👴👵'.split('');
+
+    // ========== VARIAVEIS ==========
+    let me = null;
+    let recorder = null;
+    let audioChunks = [];
+    let isRec = false;
+    let recStart = 0;
+    let recTimer = null;
+    let player = null;
+    let playerTimer = null;
+    let typingT = null;
+    let isTyping = false;
+    let seen = new Set();
+    let imgFile = null;
+    let imgData = null;
+
+    // ========== ELEMENTOS ==========
+    function $(id) { return document.getElementById(id); }
+
+    // ========== LOCALSTORAGE ==========
+    function getMsgs() {
+        try { return JSON.parse(localStorage.getItem(LS_MSGS)) || []; }
+        catch(e) { return []; }
+    }
+    function saveMsgs(msgs) {
+        try { localStorage.setItem(LS_MSGS, JSON.stringify(msgs)); }
+        catch(e) { dlog('Erro LS: ' + e.message, 'error'); }
+    }
+    function addMsg(msg) {
+        const msgs = getMsgs();
+        if (msgs.some(m => m.id === msg.id)) return false;
+        msgs.push(msg);
+        saveMsgs(msgs);
+        return true;
+    }
+    function clearMsgs() {
+        localStorage.removeItem(LS_MSGS);
+        seen.clear();
+        renderAll();
+        toast('Conversa limpa!');
+    }
+
+    // ========== INICIALIZACAO ==========
+    document.addEventListener('DOMContentLoaded', () => {
+        dlog('App iniciado');
+        $('welcome-time').textContent = fmtTime(new Date());
+        $('emoji-grid').innerHTML = EMOJIS.map(e => '<span onclick="addEmoji(this)">' + e + '</span>').join('');
+
+        const saved = localStorage.getItem(LS_USER);
+        if (saved) {
+            try {
+                const u = JSON.parse(saved);
+                $('user-name').value = u.name || '';
+                dlog('Usuario salvo: ' + u.name);
+            } catch(e) { $('user-name').value = saved; }
+        }
+
+        bindEvents();
+        bindFirebase();
+        renderAll();
+    });
+
+    function addEmoji(el) {
+        $('message-input').value += el.textContent;
+        $('message-input').focus();
+        toggleSendMic();
+    }
+
+    // ========== EVENTOS ==========
+    function bindEvents() {
+        $('btn-enter').onclick = login;
+        $('user-name').onkeypress = (e) => { if(e.key==='Enter') login(); };
+
+        $('btn-send').onclick = sendText;
+        $('message-input').onkeypress = (e) => {
+            if(e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendText(); }
+        };
+        $('message-input').oninput = () => { handleTyping(); toggleSendMic(); };
+
+        $('btn-attach').onclick = (e) => { e.stopPropagation(); toggleAttach(); };
+        document.onclick = (e) => {
+            if(!$('attach-menu').contains(e.target) && e.target!==$('btn-attach')) $('attach-menu').classList.add('hidden');
+            if(!$('emoji-picker').contains(e.target) && e.target!==$('btn-emoji')) $('emoji-picker').classList.add('hidden');
+        };
+
+        $('btn-image').onclick = () => { $('image-input').removeAttribute('capture'); $('image-input').click(); $('attach-menu').classList.add('hidden'); };
+        $('btn-camera').onclick = () => { $('image-input').setAttribute('capture','environment'); $('image-input').click(); $('attach-menu').classList.add('hidden'); };
+        $('image-input').onchange = onImgSelect;
+        $('btn-confirm-image').onclick = sendImg;
+        $('btn-cancel-image').onclick = cancelImg;
+        $('btn-close-viewer').onclick = () => $('image-viewer-modal').classList.add('hidden');
+
+        $('btn-emoji').onclick = (e) => { e.stopPropagation(); toggleEmoji(); };
+
+        $('btn-record').onclick = startRec;
+        $('btn-stop-record').onclick = stopRec;
+        $('btn-cancel-record').onclick = cancelRec;
+
+        $('btn-close-audio').onclick = closePlayer;
+        $('btn-play-pause').onclick = togglePlay;
+        $('audio-progress').oninput = seekAudio;
+
+        $('btn-clear').onclick = () => { if(confirm('Limpar conversa?')) clearMsgs(); };
+
+        $('image-preview-modal').onclick = (e) => { if(e.target===$('image-preview-modal')) cancelImg(); };
+        $('image-viewer-modal').onclick = (e) => { if(e.target===$('image-viewer-modal')) $('image-viewer-modal').classList.add('hidden'); };
+        $('audio-player-modal').onclick = (e) => { if(e.target===$('audio-player-modal')) closePlayer(); };
+    }
+
+    function toggleSendMic() {
+        const has = $('message-input').value.trim().length > 0;
+        $('btn-record').classList.toggle('hidden', has);
+        $('btn-send').classList.toggle('hidden', !has);
+    }
+    function toggleAttach() { $('attach-menu').classList.toggle('hidden'); $('emoji-picker').classList.add('hidden'); }
+    function toggleEmoji() { $('emoji-picker').classList.toggle('hidden'); $('attach-menu').classList.add('hidden'); }
+
+    // ========== LOGIN ==========
+    function login() {
+        const name = $('user-name').value.trim();
+        if(!name || name.length<2) { toast('Digite seu nome'); return; }
+
+        me = { name:name, id:'u'+Date.now()+'_'+Math.random().toString(36).substr(2,6) };
+        localStorage.setItem(LS_USER, JSON.stringify(me));
+        dlog('Login: ' + me.name);
+
+        $('login-screen').classList.remove('active');
+        setTimeout(() => {
+            $('chat-screen').classList.add('active');
+            $('message-input').focus();
+        }, 300);
+
+        toast('Bem-vindo, ' + name + '!');
+        connectRoom();
+    }
+
+    // ========== FIREBASE ==========
+    function bindFirebase() {
+        db.ref('.info/connected').on('value', (s) => {
+            const on = s.val();
+            $('online-status').textContent = on ? 'Online' : 'Offline';
+            $('online-status').style.color = on ? '#25D366' : '#ff4444';
+        });
+
+        const saved = localStorage.getItem(LS_USER);
+        if(saved) {
+            try {
+                me = JSON.parse(saved);
+                $('login-screen').classList.remove('active');
+                $('chat-screen').classList.add('active');
+                connectRoom();
+            } catch(e) { dlog('Erro ao restaurar sessao: ' + e.message, 'error'); }
+        }
+    }
+
+    function connectRoom() {
+        if(!me) return;
+        dlog('Conectando a sala...');
+
+        db.ref(SYNC).limitToLast(50).on('value', (snap) => {
+            const data = snap.val();
+            if(!data) { dlog('Sala vazia'); return; }
+
+            const keys = Object.keys(data);
+            let novas = 0;
+
+            keys.forEach(k => {
+                const d = data[k];
+                if(!d || d.senderId===me.id) return;
+                if(seen.has(d.id || d.syncId || k)) return;
+
+                const id = d.id || d.syncId || k;
+                seen.add(id);
+
+                const msg = {
+                    id: id, type: d.type || 'text', sender: d.sender || 'Anonimo', senderId: d.senderId || '',
+                    time: d.timestamp || Date.now(), text: d.text || null,
+                    img: d.imageUrl || null, audio: d.audioUrl || null, dur: d.duration || 0
+                };
+
+                if(addMsg(msg)) {
+                    renderMsg(msg);
+                    novas++;
+                }
+            });
+
+            if(novas>0) {
+                dlog(novas + ' mensagens novas');
+                scrollBottom();
+            }
+        }, (err) => {
+            dlog('ERRO Firebase: ' + err.message, 'error');
+            toast('Erro de conexao. Verifique as regras do Firebase.');
+        });
+
+        db.ref(TYPING).on('value', (snap) => {
+            const t = snap.val();
+            if(!t) { $('typing-indicator').classList.add('hidden'); return; }
+            const others = Object.keys(t).filter(id => id!==me.id);
+            if(others.length>0) {
+                const names = others.map(id => t[id].name).join(', ');
+                $('typing-text').textContent = others.length===1 ? names+' esta digitando' : names+' estao digitando';
+                $('typing-indicator').classList.remove('hidden');
+                scrollBottom();
+            } else {
+                $('typing-indicator').classList.add('hidden');
+            }
+        });
+
+        window.onbeforeunload = () => { if(me) db.ref(TYPING+'/'+me.id).remove(); };
+    }
+
+    function pub(msg) {
+        const data = {
+            id: msg.id, syncId: msg.id, type: msg.type,
+            sender: msg.sender, senderId: msg.senderId,
+            timestamp: msg.time, text: msg.text,
+            imageUrl: msg.img, audioUrl: msg.audio, duration: msg.dur
+        };
+        return db.ref(SYNC).push(data)
+            .then(() => { dlog('Enviado: ' + msg.id); })
+            .catch(err => { 
+                dlog('ERRO enviar: ' + err.message, 'error'); 
+                toast('Erro ao enviar: ' + err.message); 
+                throw err; 
+            });
+    }
+
+    // ========== TEXTO ==========
+    function sendText() {
+        const text = $('message-input').value.trim();
+        if(!text || !me) return;
+
+        const msg = mkMsg('text', {text:text});
+        addMsg(msg);
+        renderMsg(msg);
+        scrollBottom();
+
+        $('message-input').value = '';
+        toggleSendMic();
+        stopTyping();
+        pub(msg);
+    }
+
+    // ========== IMAGEM ==========
+    function onImgSelect(e) {
+        const f = e.target.files[0];
+        if(!f) return;
+        if(f.size > 8*1024*1024) { toast('Max 8MB'); return; }
+
+        imgFile = f;
+        const r = new FileReader();
+        r.onload = (ev) => {
+            imgData = ev.target.result;
+            $('preview-img').src = imgData;
+            $('image-preview-modal').classList.remove('hidden');
+        };
+        r.readAsDataURL(f);
+    }
+
+    function cancelImg() {
+        $('image-preview-modal').classList.add('hidden');
+        $('image-input').value = '';
+        imgFile = null; imgData = null;
+    }
+
+    async function sendImg() {
+        if(!imgFile || !me) return;
+        $('btn-confirm-image').textContent = 'Enviando...';
+        $('btn-confirm-image').disabled = true;
+
+        try {
+            const blob = await compressImg(imgFile);
+            const name = 'img/'+Date.now()+'_'+Math.random().toString(36).substr(2,8)+'.jpg';
+            const ref = st.ref(name);
+
+            await ref.put(blob);
+            const url = await ref.getDownloadURL();
+
+            const msg = mkMsg('image', {img:url});
+            addMsg(msg);
+            renderMsg(msg);
+            scrollBottom();
+
+            await pub(msg);
+            cancelImg();
+            toast('Imagem enviada!');
+
+        } catch(e) {
+            dlog('ERRO img: ' + e.message, 'error');
+            toast('Erro: ' + e.message);
+        } finally {
+            $('btn-confirm-image').textContent = 'Enviar';
+            $('btn-confirm-image').disabled = false;
+        }
+    }
+
+    function compressImg(file) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            const r = new FileReader();
+            r.onload = (e) => { img.src = e.target.result; };
+            r.onerror = reject;
+            r.readAsDataURL(file);
+
+            img.onload = () => {
+                const c = document.createElement('canvas');
+                const MAX = 1200;
+                let w = img.width, h = img.height;
+                if(w>h){ if(w>MAX){ h=Math.round(h*MAX/w); w=MAX; }}
+                else { if(h>MAX){ w=Math.round(w*MAX/h); h=MAX; }}
+                c.width=w; c.height=h;
+                const ctx = c.getContext('2d');
+                ctx.fillStyle='#FFF'; ctx.fillRect(0,0,w,h);
+                ctx.drawImage(img,0,0,w,h);
+                c.toBlob((b) => { if(b) resolve(b); else reject('Falha'); }, 'image/jpeg', 0.75);
+            };
+            img.onerror = reject;
+        });
+    }
+
+    // ========== AUDIO ==========
+    async function startRec() {
+        dlog('Iniciando gravacao...');
+
+        if(!navigator.mediaDevices) {
+            toast('Navegador nao suporta audio');
+            return;
+        }
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            dlog('Microfone OK');
+
+            const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 
+                            MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+            
+            dlog('MimeType: ' + (mimeType || 'padrao do navegador'));
+
+            recorder = mimeType ? new MediaRecorder(stream, { mimeType: mimeType }) : new MediaRecorder(stream);
+            audioChunks = [];
+
+            recorder.ondataavailable = (e) => {
+                dlog('Dados: ' + e.data.size + ' bytes');
+                if(e.data.size > 0) audioChunks.push(e.data);
+            };
+
+            recorder.onstop = async () => {
+                dlog('Parado. Chunks: ' + audioChunks.length);
+
+                if(audioChunks.length === 0) {
+                    dlog('Sem dados!', 'error');
+                    toast('Audio vazio');
+                    stream.getTracks().forEach(t => t.stop());
+                    return;
+                }
+
+                const blob = new Blob(audioChunks, { type: recorder.mimeType || 'audio/webm' });
+                dlog('Total: ' + blob.size + ' bytes');
+
+                if(blob.size < 100) {
+                    dlog('Muito pequeno!', 'error');
+                    toast('Audio muito curto');
+                    stream.getTracks().forEach(t => t.stop());
+                    return;
+                }
+
+                await uploadAudio(blob);
+                stream.getTracks().forEach(t => t.stop());
+            };
+
+            recorder.onerror = (e) => {
+                dlog('Erro recorder: ' + e.message, 'error');
+                toast('Erro na gravacao');
+                cancelRecUI();
+            };
+
+            recorder.start(100);
+            dlog('Gravando!');
+
+            isRec = true;
+            recStart = Date.now();
+            showRecUI();
+
+        } catch(err) {
+            dlog('Erro: ' + err.message, 'error');
+            toast('Permita o microfone nas configuracoes');
+        }
+    }
+
+    function showRecUI() {
+        $('audio-recorder').classList.remove('hidden');
+        $('normal-input').classList.add('hidden');
+        recTimer = setInterval(() => {
+            const s = Math.floor((Date.now()-recStart)/1000);
+            const m = Math.floor(s/60).toString().padStart(2,'0');
+            const sec = (s%60).toString().padStart(2,'0');
+            $('recorder-timer').textContent = m+':'+sec;
+            if(s>=300) stopRec();
+        }, 1000);
+    }
+
+    function cancelRecUI() {
+        $('audio-recorder').classList.add('hidden');
+        $('normal-input').classList.remove('hidden');
+        clearInterval(recTimer);
+        $('recorder-timer').textContent = '00:00';
+    }
+
+    function stopRec() {
+        if(!isRec || !recorder) return;
+        if(recorder.state !== 'inactive') recorder.stop();
+        isRec = false;
+        clearInterval(recTimer);
+        cancelRecUI();
+    }
+
+    function cancelRec() {
+        if(!isRec || !recorder) return;
+        if(recorder.state !== 'inactive') recorder.stop();
+        isRec = false;
+        clearInterval(recTimer);
+        audioChunks = [];
+        cancelRecUI();
+    }
+
+    async function uploadAudio(blob) {
+        dlog('Enviando audio...');
+        const dur = Math.floor((Date.now()-recStart)/1000);
+        toast('Enviando audio...');
+
+        try {
+            const name = 'audio/'+Date.now()+'_'+Math.random().toString(36).substr(2,8)+'.webm';
+            const ref = st.ref(name);
+
+            await ref.put(blob);
+            const url = await ref.getDownloadURL();
+            dlog('URL OK');
+
+            const msg = mkMsg('audio', {audio:url, dur:dur});
+            addMsg(msg);
+            renderMsg(msg);
+            scrollBottom();
+
+            await pub(msg);
+            toast('Audio enviado! (' + dur + 's)');
+
+        } catch(e) {
+            dlog('Erro upload: ' + e.message, 'error');
+            toast('Erro ao enviar audio');
+        }
+    }
+
+    // ========== CRIAR MENSAGEM ==========
+    function mkMsg(type, data) {
+        return {
+            id: 'm'+Date.now()+'_'+Math.random().toString(36).substr(2,6),
+            type: type,
+            sender: me.name,
+            senderId: me.id,
+            time: Date.now(),
+            text: data.text || null,
+            img: data.img || null,
+            audio: data.audio || null,
+            dur: data.dur || 0
+        };
+    }
+
+    // ========== RENDERIZAR ==========
+    function renderAll() {
+        $('messages-list').innerHTML = '';
+        seen.clear();
+        const msgs = getMsgs();
+        msgs.sort((a,b) => a.time - b.time);
+        msgs.forEach(m => { seen.add(m.id); renderMsg(m, false); });
+        scrollBottom();
+    }
+
+    function renderMsg(msg, anim) {
+        const isMe = msg.senderId === (me ? me.id : null);
+        if(document.querySelector('[data-id="'+msg.id+'"]')) return;
+
+        const div = document.createElement('div');
+        div.className = 'message ' + (isMe?'me':'other');
+        div.dataset.id = msg.id;
+        if(anim!==false) div.style.animation = 'msgIn 0.25s ease';
+
+        const t = fmtTime(new Date(msg.time));
+        let html = '';
+
+        if(!isMe) html += '<div class="msg-sender">'+esc(msg.sender)+'</div>';
+
+        if(msg.type==='text') {
+            html += '<div class="msg-text">'+esc(msg.text)+'</div>';
+        }
+        else if(msg.type==='image') {
+            if(msg.img) html += '<img class="msg-img" src="'+msg.img+'" onclick="viewImg(\\''+msg.img+'\\')">';
+            else html += '<div class="msg-text">[Imagem nao carregada]</div>';
+        }
+        else if(msg.type==='audio') {
+            if(msg.audio) {
+                const d = fmtDur(msg.dur);
+                html += '<div class="msg-audio" onclick="playAudio(\\''+msg.audio+'\\','+msg.dur+')">'+
+                    '<div class="aud-icon">▶️</div>'+
+                    '<div class="aud-info">'+
+                    '<div class="aud-wave"><span></span><span></span><span></span><span></span><span></span></div>'+
+                    '<div class="aud-dur">'+d+'</div></div></div>';
+            } else {
+                html += '<div class="msg-text">[Audio nao carregado]</div>';
+            }
+        }
+
+        html += '<div class="msg-meta"><span class="msg-time">'+t+'</span>'+(isMe?'<span class="msg-check">✓✓</span>':'')+'</div>';
+
+        div.innerHTML = html;
+        $('messages-list').appendChild(div);
+    }
+
+    // ========== PLAYER ==========
+    window.playAudio = function(url, dur) {
+        if(player) { player.pause(); player.currentTime=0; }
+
+        player = new Audio(url);
+        $('audio-player-modal').classList.remove('hidden');
+        $('btn-play-pause').textContent = '⏸️';
+        $('audio-progress').value = 0;
+        $('audio-progress').max = dur || 100;
+
+        player.play().catch(() => toast('Erro ao reproduzir'));
+
+        player.onended = () => {
+            $('btn-play-pause').textContent = '▶️';
+            clearInterval(playerTimer);
+        };
+        player.onerror = () => { toast('Erro audio'); closePlayer(); };
+
+        clearInterval(playerTimer);
+        playerTimer = setInterval(() => {
+            if(player && !player.paused) {
+                $('audio-progress').value = player.currentTime;
+                $('audio-time').textContent = fmtDur(Math.floor(player.currentTime))+' / '+fmtDur(dur);
+            }
+        }, 500);
+    };
+
+    function togglePlay() {
+        if(!player) return;
+        if(player.paused) { player.play().catch(()=>{}); $('btn-play-pause').textContent='⏸️'; }
+        else { player.pause(); $('btn-play-pause').textContent='▶️'; }
+    }
+    function seekAudio() { if(player) player.currentTime = parseFloat($('audio-progress').value); }
+    function closePlayer() {
+        if(player) { player.pause(); player.currentTime=0; player=null; }
+        clearInterval(playerTimer);
+        $('audio-player-modal').classList.add('hidden');
+    }
+
+    // ========== VIEWER ==========
+    window.viewImg = function(url) {
+        $('viewer-img').src = url;
+        $('image-viewer-modal').classList.remove('hidden');
+    };
+
+    // ========== TYPING ==========
+    function handleTyping() {
+        if(!me) return;
+        if(!isTyping && $('message-input').value.length>0) {
+            isTyping = true;
+            db.ref(TYPING+'/'+me.id).set({name:me.name, timestamp:firebase.database.ServerValue.TIMESTAMP});
+        }
+        clearTimeout(typingT);
+        typingT = setTimeout(stopTyping, 2500);
+    }
+    function stopTyping() {
+        if(!isTyping || !me) return;
+        isTyping = false;
+        db.ref(TYPING+'/'+me.id).remove();
+    }
+
+    // ========== UTILS ==========
+    function scrollBottom() {
+        requestAnimationFrame(() => { $('messages-area').scrollTop = $('messages-area').scrollHeight; });
+    }
+    function fmtTime(d) {
+        try { return d.toLocaleTimeString('pt-MZ',{hour:'2-digit',minute:'2-digit'}); }
+        catch { const h=d.getHours().toString().padStart(2,'0'); const m=d.getMinutes().toString().padStart(2,'0'); return h+':'+m; }
+    }
+    function fmtDur(s) {
+        if(!s || s<0) s=0;
+        const m=Math.floor(s/60).toString().padStart(2,'0');
+        const sec=(s%60).toString().padStart(2,'0');
+        return m+':'+sec;
+    }
+    function esc(t) { if(!t)return''; const d=document.createElement('div'); d.textContent=t; return d.innerHTML; }
+
+    let toastT = null;
+    function toast(m) {
+        $('toast').textContent = m;
+        $('toast').classList.remove('hidden');
+        clearTimeout(toastT);
+        toastT = setTimeout(() => $('toast').classList.add('hidden'), 3000);
+    }
+    </script>
 </body>
 </html>

@@ -378,6 +378,12 @@ async function startRec() {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         dlog('Microfone OK');
 
+        // Debug do microfone (CRÍTICO)
+        dlog('Stream tracks: ' + stream.getAudioTracks().length);
+        stream.getAudioTracks().forEach(t => {
+            dlog('Mic ativo: ' + t.label);
+        });
+
         // Criar MediaRecorder SEM especificar mimeType (deixa o navegador escolher)
         recorder = new MediaRecorder(stream);
         audioChunks = [];
@@ -417,8 +423,30 @@ async function startRec() {
             cancelRecUI();
         };
 
+        // Adicionar onstart para debug
+        recorder.onstart = () => {
+            dlog('🎙️ MediaRecorder START OK');
+        };
+
         // Iniciar
         recorder.start();
+        dlog('Recorder start() chamado');
+
+        setTimeout(() => {
+            if(audioChunks.length === 0) {
+                dlog('⚠️ Nenhum áudio recebido após start', 'error');
+            }
+        }, 2000);
+
+        // Fallback automático se MediaRecorder falhar
+        setTimeout(() => {
+            if(audioChunks.length === 0 && isRec) {
+                dlog('🚨 MediaRecorder falhou → fallback automático', 'error');
+                recorder.stop();
+                startWebAudio(stream);
+            }
+        }, 3000);
+
         isRec = true;
         recStart = Date.now();
         showRecUI();

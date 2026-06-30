@@ -4,607 +4,83 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Islam Moçambique - Aulas Online</title>
-    <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Noto+Sans+Arabic:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #0f2f1f 0%, #1a4d33 50%, #0f2f1f 100%);
-            min-height: 100vh;
-            color: #fff;
-            overflow-x: hidden;
+            min-height: 100vh; color: #fff; padding: 20px;
         }
-
-        /* Background pattern */
-        .bg-pattern {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-image: 
-                radial-gradient(circle at 20% 80%, rgba(212, 175, 55, 0.08) 0%, transparent 50%),
-                radial-gradient(circle at 80% 20%, rgba(212, 175, 55, 0.08) 0%, transparent 50%),
-                radial-gradient(circle at 50% 50%, rgba(212, 175, 55, 0.03) 0%, transparent 70%);
-            pointer-events: none;
-            z-index: 0;
+        .container { max-width: 900px; margin: 0 auto; }
+        .header { text-align: center; padding: 30px 20px; }
+        .header h1 { font-size: 2rem; margin-bottom: 5px; }
+        .header .subtitle { color: #a8c5b0; font-size: 1.1rem; }
+        .divider { width: 80px; height: 3px; background: #d4af37; margin: 15px auto; border-radius: 2px; }
+        
+        .info-box {
+            background: rgba(255,255,255,0.05); border: 1px solid rgba(212,175,55,0.2);
+            border-radius: 16px; padding: 20px; margin-bottom: 20px;
         }
-
-        .container {
-            position: relative;
-            z-index: 1;
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-
-        /* Header */
-        .header {
-            text-align: center;
-            padding: 40px 20px 30px;
-        }
-
-        .header .arabic-title {
-            font-family: 'Noto Sans Arabic', 'Amiri', serif;
-            font-size: 2.5rem;
-            color: #d4af37;
-            margin-bottom: 10px;
-            text-shadow: 0 2px 10px rgba(212, 175, 55, 0.3);
-            letter-spacing: 2px;
-        }
-
-        .header h1 {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #fff;
-            margin-bottom: 8px;
-            letter-spacing: 1px;
-        }
-
-        .header .subtitle {
-            font-size: 1.1rem;
-            color: #a8c5b0;
-            font-weight: 300;
-        }
-
-        .header .divider {
-            width: 80px;
-            height: 3px;
-            background: linear-gradient(90deg, transparent, #d4af37, transparent);
-            margin: 20px auto;
-            border-radius: 2px;
-        }
-
-        /* Info Section */
-        .info-section {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(212, 175, 55, 0.2);
-            border-radius: 16px;
-            padding: 25px;
-            margin-bottom: 30px;
-            backdrop-filter: blur(10px);
-            transition: all 0.3s ease;
-        }
-
-        .info-section:hover {
-            border-color: rgba(212, 175, 55, 0.4);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-        }
-
-        .info-section h2 {
-            color: #d4af37;
-            font-size: 1.3rem;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .info-section h2 .icon {
-            font-size: 1.5rem;
-        }
-
-        .info-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 15px;
-        }
-
-        .info-item {
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 10px;
-            padding: 15px;
-            border-left: 3px solid #d4af37;
-        }
-
-        .info-item .label {
-            font-size: 0.85rem;
-            color: #a8c5b0;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 5px;
-        }
-
-        .info-item .value {
-            font-size: 1rem;
-            color: #fff;
-            font-weight: 500;
-        }
-
-        /* Buttons Section */
-        .buttons-section {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            margin-bottom: 30px;
-        }
-
+        .info-box h2 { color: #d4af37; margin-bottom: 15px; font-size: 1.2rem; }
+        .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+        .info-item { background: rgba(0,0,0,0.2); border-radius: 10px; padding: 12px; border-left: 3px solid #d4af37; }
+        .info-item .label { font-size: 0.8rem; color: #a8c5b0; text-transform: uppercase; }
+        .info-item .value { font-size: 1rem; color: #d4af37; font-weight: 700; }
+        .days { display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap; }
+        .day-badge { background: #d4af37; color: #0f2f1f; padding: 3px 10px; border-radius: 15px; font-size: 0.8rem; font-weight: 700; }
+        
         .btn {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            padding: 18px 25px;
-            border-radius: 14px;
-            text-decoration: none;
-            font-size: 1.1rem;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            cursor: pointer;
-            border: none;
-            position: relative;
-            overflow: hidden;
+            display: block; width: 100%; padding: 16px; border-radius: 12px;
+            text-decoration: none; font-size: 1.05rem; font-weight: 600;
+            margin-bottom: 12px; text-align: center; transition: transform 0.2s;
         }
-
-        .btn::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-            transition: left 0.5s ease;
-        }
-
-        .btn:hover::before {
-            left: 100%;
-        }
-
-        .btn-info {
-            background: linear-gradient(135deg, #d4af37, #b8941f);
-            color: #0f2f1f;
-            box-shadow: 0 4px 20px rgba(212, 175, 55, 0.3);
-        }
-
-        .btn-info:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 30px rgba(212, 175, 55, 0.4);
-        }
-
-        .btn-sala1 {
-            background: linear-gradient(135deg, #1e6b4a, #2d8a5e);
-            color: #fff;
-            box-shadow: 0 4px 20px rgba(30, 107, 74, 0.3);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .btn-sala1:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 30px rgba(30, 107, 74, 0.4);
-            background: linear-gradient(135deg, #247a54, #35996a);
-        }
-
-        .btn-sala2 {
-            background: linear-gradient(135deg, #1a5c3f, #287a52);
-            color: #fff;
-            box-shadow: 0 4px 20px rgba(26, 92, 63, 0.3);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .btn-sala2:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 30px rgba(26, 92, 63, 0.4);
-            background: linear-gradient(135deg, #206b4a, #2f8a5e);
-        }
-
-        .btn .icon {
-            font-size: 1.4rem;
-        }
-
-        .btn .arrow {
-            margin-left: auto;
-            font-size: 1.2rem;
-            opacity: 0.7;
-        }
-
-        /* Sala Cards */
-        .salas-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        .sala-card {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(212, 175, 55, 0.15);
-            border-radius: 16px;
-            padding: 25px;
-            text-align: center;
-            transition: all 0.3s ease;
-            backdrop-filter: blur(5px);
-        }
-
-        .sala-card:hover {
-            transform: translateY(-5px);
-            border-color: rgba(212, 175, 55, 0.4);
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-        }
-
-        .sala-card .sala-number {
-            width: 50px;
-            height: 50px;
-            background: linear-gradient(135deg, #d4af37, #b8941f);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.3rem;
-            font-weight: 700;
-            color: #0f2f1f;
-            margin: 0 auto 15px;
-        }
-
-        .sala-card h3 {
-            color: #d4af37;
-            font-size: 1.2rem;
-            margin-bottom: 8px;
-        }
-
-        .sala-card p {
-            color: #a8c5b0;
-            font-size: 0.95rem;
-            margin-bottom: 15px;
-        }
-
-        .sala-card .join-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 10px 20px;
-            background: rgba(212, 175, 55, 0.15);
-            border: 1px solid rgba(212, 175, 55, 0.3);
-            border-radius: 25px;
-            color: #d4af37;
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 0.95rem;
-            transition: all 0.3s ease;
-        }
-
-        .sala-card .join-btn:hover {
-            background: rgba(212, 175, 55, 0.3);
-            transform: scale(1.05);
-        }
-
-        /* Footer */
-        .footer {
-            text-align: center;
-            padding: 30px 20px;
-            border-top: 1px solid rgba(212, 175, 55, 0.1);
-            margin-top: 20px;
-        }
-
-        .footer .arabic-footer {
-            font-family: 'Noto Sans Arabic', 'Amiri', serif;
-            font-size: 1.5rem;
-            color: #d4af37;
-            margin-bottom: 10px;
-        }
-
-        .footer p {
-            color: #a8c5b0;
-            font-size: 0.9rem;
-        }
-
-        .footer .contact {
-            margin-top: 15px;
-            display: flex;
-            justify-content: center;
-            gap: 15px;
-            flex-wrap: wrap;
-        }
-
-        .footer .contact a {
-            color: #d4af37;
-            text-decoration: none;
-            font-size: 0.9rem;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            transition: color 0.3s ease;
-        }
-
-        .footer .contact a:hover {
-            color: #fff;
-        }
-
-        /* Animations */
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .animate-in {
-            animation: fadeInUp 0.6s ease forwards;
-        }
-
-        .delay-1 { animation-delay: 0.1s; opacity: 0; }
-        .delay-2 { animation-delay: 0.2s; opacity: 0; }
-        .delay-3 { animation-delay: 0.3s; opacity: 0; }
-        .delay-4 { animation-delay: 0.4s; opacity: 0; }
-        .delay-5 { animation-delay: 0.5s; opacity: 0; }
-
-        /* Responsive */
-        @media (max-width: 600px) {
-            .header .arabic-title {
-                font-size: 1.8rem;
-            }
-            .header h1 {
-                font-size: 1.5rem;
-            }
-            .btn {
-                font-size: 1rem;
-                padding: 15px 20px;
-            }
-            .info-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        /* Modal for info */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.7);
-            z-index: 1000;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
-
-        .modal-overlay.active {
-            display: flex;
-        }
-
-        .modal {
-            background: linear-gradient(135deg, #1a4d33, #0f2f1f);
-            border: 1px solid rgba(212, 175, 55, 0.3);
-            border-radius: 20px;
-            padding: 30px;
-            max-width: 500px;
-            width: 100%;
-            position: relative;
-            animation: fadeInUp 0.3s ease;
-        }
-
-        .modal h3 {
-            color: #d4af37;
-            font-size: 1.4rem;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-
-        .modal .close-btn {
-            position: absolute;
-            top: 15px;
-            right: 15px;
-            background: none;
-            border: none;
-            color: #d4af37;
-            font-size: 1.5rem;
-            cursor: pointer;
-            transition: transform 0.3s ease;
-        }
-
-        .modal .close-btn:hover {
-            transform: rotate(90deg);
-        }
-
-        .modal-content-item {
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 12px;
-            border-left: 3px solid #d4af37;
-        }
-
-        .modal-content-item .label {
-            color: #a8c5b0;
-            font-size: 0.85rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 5px;
-        }
-
-        .modal-content-item .value {
-            color: #fff;
-            font-size: 1rem;
-        }
+        .btn:hover { transform: translateY(-2px); }
+        .btn-info { background: linear-gradient(135deg, #d4af37, #b8941f); color: #0f2f1f; }
+        .btn-sala1 { background: linear-gradient(135deg, #1e6b4a, #2d8a5e); color: #fff; }
+        .btn-sala2 { background: linear-gradient(135deg, #1a5c3f, #287a52); color: #fff; }
+        
+        .footer { text-align: center; padding: 30px; border-top: 1px solid rgba(212,175,55,0.1); margin-top: 20px; }
+        .footer p { color: #a8c5b0; font-size: 0.9rem; }
     </style>
 </head>
 <body>
-    <div class="bg-pattern"></div>
-
     <div class="container">
-        <!-- Header -->
-        <div class="header animate-in delay-1">
-            <div class="arabic-title">الإسلام موزمبيق</div>
+        <div class="header">
             <h1>Islam Moçambique</h1>
             <p class="subtitle">Aulas Online de Ensino Islâmico</p>
             <div class="divider"></div>
         </div>
 
-        <!-- Info Section -->
-        <div class="info-section animate-in delay-2">
-            <h2><span class="icon">📋</span> Horários e Informações</h2>
+        <div class="info-box">
+            <h2>📋 Horários e Informações</h2>
             <div class="info-grid">
                 <div class="info-item">
                     <div class="label">Dias de Aula</div>
-                    <div class="value">Segunda a Sábado</div>
+                    <div class="value">Segunda, Quarta e Sexta</div>
+                    <div class="days">
+                        <span class="day-badge">Segunda</span>
+                        <span class="day-badge">Quarta</span>
+                        <span class="day-badge">Sexta</span>
+                    </div>
                 </div>
                 <div class="info-item">
                     <div class="label">Horário</div>
-                    <div class="value">19:00 - 21:00 (CAT)</div>
+                    <div class="value">20:00 (CAT)</div>
                 </div>
                 <div class="info-item">
                     <div class="label">Plataforma</div>
-                    <div class="value">Telegram (Chat de Voz)</div>
-                </div>
-                <div class="info-item">
-                    <div class="label">Níveis</div>
-                    <div class="value">Iniciantes e Avançados</div>
+                    <div class="value">Telegram</div>
                 </div>
             </div>
         </div>
 
-        <!-- Main Buttons -->
-        <div class="buttons-section animate-in delay-3">
-            <a href="https://t.me/+Vzls6fHEmXVjODg0" target="_blank" class="btn btn-info">
-                <span class="icon">📢</span>
-                <span>Horário e Informações</span>
-                <span class="arrow">→</span>
-            </a>
+        <a href="https://t.me/+Vzls6fHEmXVjODg0" class="btn btn-info">📢 Horário e Informações</a>
+        <a href="https://t.me/+jwzlpbuFGjxmODI0" class="btn btn-sala1">🕌 Sala 1 — Madrassa Iniciantes</a>
+        <a href="https://t.me/+2-yy49RzGg8yYWM0" class="btn btn-sala2">📖 Sala 2 — Madrassa Online</a>
 
-            <a href="https://t.me/+jwzlpbuFGjxmODI0" target="_blank" class="btn btn-sala1">
-                <span class="icon">🕌</span>
-                <span>Sala 1 — Madrassa Iniciantes</span>
-                <span class="arrow">→</span>
-            </a>
-
-            <a href="https://t.me/+2-yy49RzGg8yYWM0" target="_blank" class="btn btn-sala2">
-                <span class="icon">📖</span>
-                <span>Sala 2 — Madrassa Online</span>
-                <span class="arrow">→</span>
-            </a>
-        </div>
-
-        <!-- Sala Cards -->
-        <div class="salas-grid animate-in delay-4">
-            <div class="sala-card">
-                <div class="sala-number">1</div>
-                <h3>Sala 1 — Madrassa Iniciantes</h3>
-                <p>Aulas para quem está começando a aprender sobre o Islam. Fundamentos, crenças básicas e práticas diárias.</p>
-                <a href="https://t.me/+jwzlpbuFGjxmODI0" target="_blank" class="join-btn">
-                    <span>💬</span> Entrar na Sala
-                </a>
-            </div>
-
-            <div class="sala-card">
-                <div class="sala-number">2</div>
-                <h3>Sala 2 — Madrassa Online</h3>
-                <p>Aulas avançadas e aprofundamento em temas islâmicos. Estudo do Alcorão, Hadith e Fiqh.</p>
-                <a href="https://t.me/+2-yy49RzGg8yYWM0" target="_blank" class="join-btn">
-                    <span>💬</span> Entrar na Sala
-                </a>
-            </div>
-        </div>
-
-        <!-- Footer -->
-        <div class="footer animate-in delay-5">
-            <div class="arabic-footer">بسم الله الرحمن الرحيم</div>
+        <div class="footer">
             <p>Que Allah abençoe todos os estudantes e professores</p>
-            <div class="contact">
-                <a href="https://t.me/+Vzls6fHEmXVjODg0" target="_blank">
-                    <span>📱</span> Grupo de Informações
-                </a>
-            </div>
         </div>
     </div>
-
-    <!-- Modal for detailed info -->
-    <div class="modal-overlay" id="infoModal">
-        <div class="modal">
-            <button class="close-btn" onclick="closeModal()">✕</button>
-            <h3>📋 Informações Detalhadas</h3>
-            <div class="modal-content-item">
-                <div class="label">Como Participar</div>
-                <div class="value">Clique nos botões acima para entrar nos grupos do Telegram. As aulas são realizadas em chat de voz (voice chat).</div>
-            </div>
-            <div class="modal-content-item">
-                <div class="label">Requisitos</div>
-                <div class="value">Ter o Telegram instalado no telemóvel ou computador. Conexão estável com internet.</div>
-            </div>
-            <div class="modal-content-item">
-                <div class="label">Material de Estudo</div>
-                <div class="value">Os materiais são partilhados diretamente nos grupos durante as aulas.</div>
-            </div>
-            <div class="modal-content-item">
-                <div class="label">Contato</div>
-                <div class="value">Para mais informações, entre no grupo "Horário e Informações".</div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // Add scroll animations
-        const observerOptions = {
-            threshold: 0.1,
-            rootMargin: '0px 0px -50px 0px'
-        };
-
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.style.opacity = '1';
-                }
-            });
-        }, observerOptions);
-
-        document.querySelectorAll('.animate-in').forEach(el => {
-            observer.observe(el);
-        });
-
-        // Modal functions
-        function openModal() {
-            document.getElementById('infoModal').classList.add('active');
-            document.body.style.overflow = 'hidden';
-        }
-
-        function closeModal() {
-            document.getElementById('infoModal').classList.remove('active');
-            document.body.style.overflow = '';
-        }
-
-        // Close modal on overlay click
-        document.getElementById('infoModal').addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeModal();
-            }
-        });
-
-        // Close modal on Escape key
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                closeModal();
-            }
-        });
-    </script>
 </body>
 </html>

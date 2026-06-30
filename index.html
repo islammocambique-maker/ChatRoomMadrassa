@@ -13,10 +13,11 @@
         }
         .container { max-width: 900px; margin: 0 auto; }
         .header { text-align: center; padding: 30px 20px; }
+        .header .arabic { font-size: 2rem; color: #d4af37; margin-bottom: 5px; }
         .header h1 { font-size: 2rem; margin-bottom: 5px; }
         .header .subtitle { color: #a8c5b0; font-size: 1.1rem; }
         .divider { width: 80px; height: 3px; background: #d4af37; margin: 15px auto; border-radius: 2px; }
-        
+
         .info-box {
             background: rgba(255,255,255,0.05); border: 1px solid rgba(212,175,55,0.2);
             border-radius: 16px; padding: 20px; margin-bottom: 20px;
@@ -28,24 +29,45 @@
         .info-item .value { font-size: 1rem; color: #d4af37; font-weight: 700; }
         .days { display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap; }
         .day-badge { background: #d4af37; color: #0f2f1f; padding: 3px 10px; border-radius: 15px; font-size: 0.8rem; font-weight: 700; }
-        
+
         .btn {
-            display: block; width: 100%; padding: 16px; border-radius: 12px;
-            text-decoration: none; font-size: 1.05rem; font-weight: 600;
-            margin-bottom: 12px; text-align: center; transition: transform 0.2s;
+            display: block; width: 100%; padding: 18px; border-radius: 14px;
+            text-decoration: none; font-size: 1.1rem; font-weight: 600;
+            margin-bottom: 14px; text-align: center; transition: transform 0.2s;
+            border: none; cursor: pointer;
         }
-        .btn:hover { transform: translateY(-2px); }
+        .btn:hover { transform: translateY(-3px); }
         .btn-info { background: linear-gradient(135deg, #d4af37, #b8941f); color: #0f2f1f; }
         .btn-sala1 { background: linear-gradient(135deg, #1e6b4a, #2d8a5e); color: #fff; }
         .btn-sala2 { background: linear-gradient(135deg, #1a5c3f, #287a52); color: #fff; }
-        
+
+        .salas-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .sala-card {
+            background: rgba(255,255,255,0.05); border: 1px solid rgba(212,175,55,0.15);
+            border-radius: 16px; padding: 20px; text-align: center;
+        }
+        .sala-card .num {
+            width: 45px; height: 45px; background: #d4af37; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.2rem; font-weight: 700; color: #0f2f1f; margin: 0 auto 10px;
+        }
+        .sala-card h3 { color: #d4af37; margin-bottom: 8px; }
+        .sala-card p { color: #a8c5b0; font-size: 0.9rem; margin-bottom: 12px; }
+        .sala-card a {
+            display: inline-block; padding: 8px 18px; background: rgba(212,175,55,0.15);
+            border: 1px solid rgba(212,175,55,0.3); border-radius: 20px;
+            color: #d4af37; text-decoration: none; font-weight: 600; font-size: 0.9rem;
+        }
+
         .footer { text-align: center; padding: 30px; border-top: 1px solid rgba(212,175,55,0.1); margin-top: 20px; }
+        .footer .arabic-footer { font-size: 1.3rem; color: #d4af37; margin-bottom: 8px; }
         .footer p { color: #a8c5b0; font-size: 0.9rem; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
+            <div class="arabic">الإسلام موزمبيق</div>
             <h1>Islam Moçambique</h1>
             <p class="subtitle">Aulas Online de Ensino Islâmico</p>
             <div class="divider"></div>
@@ -69,7 +91,11 @@
                 </div>
                 <div class="info-item">
                     <div class="label">Plataforma</div>
-                    <div class="value">Telegram</div>
+                    <div class="value">Telegram (Chat de Voz)</div>
+                </div>
+                <div class="info-item">
+                    <div class="label">Níveis</div>
+                    <div class="value">Iniciantes e Avançados</div>
                 </div>
             </div>
         </div>
@@ -78,7 +104,23 @@
         <a href="https://t.me/+jwzlpbuFGjxmODI0" class="btn btn-sala1">🕌 Sala 1 — Madrassa Iniciantes</a>
         <a href="https://t.me/+2-yy49RzGg8yYWM0" class="btn btn-sala2">📖 Sala 2 — Madrassa Online</a>
 
+        <div class="salas-grid">
+            <div class="sala-card">
+                <div class="num">1</div>
+                <h3>Sala 1 — Madrassa Iniciantes</h3>
+                <p>Fundamentos do Islam, crenças básicas e práticas diárias para quem está começando.</p>
+                <a href="https://t.me/+jwzlpbuFGjxmODI0">Entrar na Sala</a>
+            </div>
+            <div class="sala-card">
+                <div class="num">2</div>
+                <h3>Sala 2 — Madrassa Online</h3>
+                <p>Aprofundamento em Alcorão, Hadith e Fiqh para estudantes mais avançados.</p>
+                <a href="https://t.me/+2-yy49RzGg8yYWM0">Entrar na Sala</a>
+            </div>
+        </div>
+
         <div class="footer">
+            <div class="arabic-footer">بسم الله الرحمن الرحيم</div>
             <p>Que Allah abençoe todos os estudantes e professores</p>
         </div>
     </div>
